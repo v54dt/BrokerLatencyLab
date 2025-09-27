@@ -1,0 +1,30 @@
+[global]
+timezone = "Asia/Taipei"
+
+[brokers.concords-stock-cpp]
+enabled = true
+replicas = 1
+cpu_limit = "1.0"
+memory_limit = "512M"
+cpu_reservation = "0.5"
+memory_reservation = "256M"
+
+[brokers.concords-stock-python]
+enabled = true
+replicas = 1
+cpu_limit = "1.0"
+memory_limit = "512M"
+cpu_reservation = "0.5"
+memory_reservation = "256M"
+
+[brokers.concords-futures-python]
+enabled = false
+replicas = 1
+cpu_limit = "0.5"
+memory_limit = "256M"
+
+[brokers.sinotrade-stock-python]
+enabled = false
+replicas = 1
+cpu_limit = "0.5"
+memory_limit = "256M"
