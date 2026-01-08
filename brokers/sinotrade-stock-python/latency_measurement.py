@@ -1,9 +1,3 @@
-#!/usr/bin/env python3
-"""
-Sinotrade Stock Latency Measurement Tool
-Measures order submission latency by submitting and immediately canceling orders.
-"""
-
 import shioaji as sj
 import time
 import requests
@@ -92,7 +86,6 @@ class LatencyMeasurement:
             "api": ["url", "broker_name"],
         }
 
-        # Check required fields
         for section, fields in required_fields.items():
             if section not in self.config:
                 raise ValueError(f"Missing config section: [{section}]")
@@ -100,7 +93,6 @@ class LatencyMeasurement:
                 if field not in self.config[section]:
                     raise ValueError(f"Missing required config: [{section}].{field}")
 
-        # Validate ranges
         if self.config["order"]["price"] <= 0:
             raise ValueError("Price must be positive")
         if self.config["order"]["quantity"] <= 0:
@@ -111,62 +103,61 @@ class LatencyMeasurement:
         logger.info("Configuration validated successfully")
 
     def _order_callback(self, stat, msg):
-        """Handle order state updates from exchange."""
+        """Handle order state updates from exchange.
+
+        Args:
+            stat: OrderState (StockOrder, StockDeal, FuturesOrder, FuturesDeal)
+            msg: dict containing order/deal information
+        """
         try:
-            op_type = msg.operation.op_type if hasattr(msg, "operation") else "N/A"
-            order_id = msg.order.id if hasattr(msg, "order") else "N/A"
-            status = msg.status.status if hasattr(msg, "status") else "N/A"
+            if stat != sj.constant.OrderState.StockOrder:
+                return
+
+            operation = msg.get("operation", {})
+            order = msg.get("order", {})
+            op_type = operation.get("op_type", "Unknown")
+            op_code = operation.get("op_code", "")
+            order_id = order.get("id", "N/A")
 
             logger.info(
-                f"Order callback: stat={stat}, op_type={op_type}, order_id={order_id}, status={status}"
+                f"Order callback: op_type={op_type}, op_code={op_code}, order_id={order_id}"
             )
 
-            if not self.current_trade or not hasattr(msg, "order"):
+            # Check if this is our current order
+            if not self.current_trade or order_id != self.current_trade.order.id:
                 return
 
-            if msg.order.id != self.current_trade.order.id:
-                return
+            # Handle New order (submission)
+            if op_type == "New":
+                self._handle_order_submitted(operation, order)
 
-            if hasattr(msg, "status") and msg.status.status in ORDER_FILLED_STATUSES:
-                logger.warning(
-                    f"Order filled before cancellation! Status: {msg.status.status}"
-                )
-                self.order_event.set()
-                self.cancel_event.set()
-                return
-
-            # Handle different operation types
-            if not hasattr(msg, "operation"):
-                return
-
-            op_type = msg.operation.op_type
-
-            # Parse order callback
-            # New Order
-            if op_type == sj.constant.Action.New:
-                self._handle_order_submitted(msg)
-
-            # Order cancelled
-            elif op_type == sj.constant.Action.Cancel:
-                self._handle_order_cancelled(msg)
+            # Handle Cancel order
+            elif op_type == "Cancel":
+                self._handle_order_cancelled(operation, order)
 
         except Exception as e:
             logger.error(f"Error in order callback: {e}")
             traceback.print_exc()
 
-    def _handle_order_submitted(self, msg):
-        """Handle order submission confirmation."""
-        if (
-            not hasattr(msg, "status")
-            or msg.status.status not in ORDER_SUBMITTED_STATUSES
-        ):
-            return
+    def _handle_order_submitted(self, operation, order):
+        """Handle order submission confirmation.
 
+        Stops timing as soon as callback is triggered, then cancels order.
+        """
         end_time = time.perf_counter()
         self.measured_latency_ms = (end_time - self.order_start_time) * 1000
 
-        logger.info(f"  Order ID: {msg.order.id}")
-        logger.info(f"  Status: {msg.status.status}")
+        op_code = operation.get("op_code", "")
+        op_msg = operation.get("op_msg", "")
+
+        if op_code != "00":
+            logger.error(f"Order rejected: {op_msg}")
+            self.order_event.set()
+            return
+
+        logger.info(f"Order confirmed by exchange!")
+        logger.info(f"  Order ID: {order.get('id')}")
+        logger.info(f"  Op code: {op_code}")
         logger.info(f"  Round-trip latency: {self.measured_latency_ms:.2f} ms")
 
         side = "B" if self.current_action == "buy" else "S"
@@ -182,14 +173,21 @@ class LatencyMeasurement:
 
         threading.Thread(target=self._cancel_order_async, daemon=True).start()
 
-    def _handle_order_cancelled(self, msg):
+    def _handle_order_cancelled(self, operation, order):
         """Handle order cancellation confirmation."""
-        logger.info(f"Order cancelled: {msg.order.id}")
+        op_code = operation.get("op_code", "")
+        op_msg = operation.get("op_msg", "")
+        order_id = order.get("id", "N/A")
 
-        if hasattr(msg, "status"):
-            logger.info(f"  Cancel status: {msg.status.status}")
-            if msg.status.status in ORDER_CANCELLED_STATUSES:
-                self.cancel_event.set()
+        logger.info(f"Order cancel callback: {order_id}")
+
+        if op_code == "00":
+            logger.info(f"  Order cancelled successfully")
+            self.cancel_event.set()
+        else:
+            logger.warning(f"  Cancel failed: {op_msg}")
+
+            self.cancel_event.set()
 
     def _cancel_order_async(self):
         """Cancel order immediately (called from Thread)."""
