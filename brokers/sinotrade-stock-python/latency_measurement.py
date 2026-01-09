@@ -72,7 +72,7 @@ class LatencyMeasurement:
     def validate_config(self):
         """Validate configuration on startup."""
         required_fields = {
-            "user": ["api_key", "secret_key", "person_id"],
+            "user": ["api_key", "secret_key", "ca_cert_path", "ca_password"],
             "order": [
                 "symbol",
                 "price",
@@ -222,9 +222,17 @@ class LatencyMeasurement:
             self.api.login(
                 api_key=self.config["user"]["api_key"],
                 secret_key=self.config["user"]["secret_key"],
-                person_id=self.config["user"]["person_id"],
+                contracts_cb=lambda security_type: None,
             )
-            logger.info("Login successful")
+
+            ca_cert_path = self.config["user"]["ca_cert_path"]
+            ca_password = self.config["user"]["ca_password"]
+            self.api.activate_ca(
+                ca_path=ca_cert_path,
+                ca_passwd=ca_password,
+                person_id=self.api.person_id(),
+            )
+            logger.info("Login and CA activation successful")
 
             if not self.api.stock_account:
                 logger.error("No stock account found")

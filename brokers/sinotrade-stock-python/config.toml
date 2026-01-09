@@ -11,7 +11,7 @@ price = 11.0
 quantity = 1
 action = "Buy"  # Buy or Sell
 price_type = "LMT"  # LMT (限價), MKT (市價), MKP (範圍市價)
-order_type = "ROD"  # ROD, IOC, FOK
+order_type = "ROD"  # TimeInForce: ROD, IOC, FOK
 order_lot = "Common"  # Common (整股), IntradayOdd (盤中零股), Odd (盤後零股), Fixing (定盤)
 account_index = 0  # Index of stock account to use
 
@@ -22,4 +22,5 @@ broker_name = "sinotrade-stock-python"
 [user]
 api_key = ""
 secret_key = ""
-person_id = ""
+ca_cert_path = ""
+ca_password = ""
