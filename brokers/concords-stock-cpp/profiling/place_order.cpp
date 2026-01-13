@@ -140,8 +140,20 @@ int main(int argc, char* argv[]) {
   std::string current_order_ticket_id;
   std::mutex mtx;
   std::condition_variable cv, cancel_cv;
+  uint64_t submit_end_ns = 0;
+  uint64_t start_ns = 0;
 
   client->SetOrderSubmitCallback([&](const OrderSubmitResult& result) {
+    if (enable_timing) {
+      auto end = std::chrono::high_resolution_clock::now();
+      submit_end_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                          end.time_since_epoch())
+                          .count();
+
+      std::cerr << "===END=" << submit_end_ns << "===" << std::endl;
+      std::cerr << "TOTAL_NS=" << (submit_end_ns - start_ns) << std::endl;
+    }
+
     if (result.success) {
       std::cerr << "Order submitted successfully!" << std::endl;
       std::cerr << "Order ID: " << result.order_id << std::endl;
@@ -150,6 +162,7 @@ int main(int argc, char* argv[]) {
       current_order_id = result.order_id;
       current_order_ticket_id = result.order_ticket_id;
 
+      std::this_thread::sleep_for(std::chrono::seconds(1));
       client->CancelOrder(current_order_id, current_order_ticket_id,
                           order_info);
     } else {
@@ -191,7 +204,6 @@ int main(int argc, char* argv[]) {
   std::this_thread::sleep_for(std::chrono::seconds(1));
   std::cerr << "Connected and logged in" << std::endl;
 
-  uint64_t start_ns = 0;
   if (enable_timing) {
     auto start = std::chrono::high_resolution_clock::now();
     start_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
@@ -201,15 +213,6 @@ int main(int argc, char* argv[]) {
   }
 
   client->SubmitOrder(order_info);
-
-  if (enable_timing) {
-    auto end = std::chrono::high_resolution_clock::now();
-    uint64_t end_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
-                          end.time_since_epoch())
-                          .count();
-    std::cerr << "===END=" << end_ns << "===" << std::endl;
-    std::cerr << "TOTAL_NS=" << (end_ns - start_ns) << std::endl;
-  }
 
   {
     std::unique_lock<std::mutex> lock(mtx);
