@@ -47,7 +47,10 @@ def generate_docker_compose(config):
                 'network_mode': 'host',
                 'restart': 'unless-stopped',
                 'stdin_open': True,
-                'tty': True
+                'tty': True,
+                'volumes': [
+                    f'./brokers/{broker_name}/certs:/app/certs:ro'
+                ]
             }
 
             # Add resource limits
