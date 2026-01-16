@@ -2,9 +2,9 @@
  * Place order with timing markers.
  *
  * Usage:
- *     ./place_order                           # Uses order_config.toml
- *     ./place_order --no-timing               # Disable timing markers
- *     ./place_order --config custom.toml      # Use custom config file
+ *     ./place_order                              # Uses order_config.toml
+ *     ./place_order --no-timing                  # Disable timing markers
+ *     ./place_order --config order_config.toml   # Use custom config file
  */
 
 #include <toml++/toml.h>
