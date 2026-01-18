@@ -48,12 +48,6 @@ The Shioaji SDK sends error logs to Sentry by default. When an error occurs, the
 
 **To disable error tracking:**
 
-Option 1: Environment variable
 ```bash
 export LOG_SENTRY=False
-```
-
-Option 2: Login parameter
-```python
-api.login(..., error_tracking=False)
 ```
