@@ -39,3 +39,21 @@ api.fetch_contracts(contracts_timeout=10000)  # Fetch separately with 10s timeou
 ```
 
 If the cache is valid, `fetch_contracts()` will use the local cache without contacting the server.
+
+## Error Tracking (Sentry)
+
+> Source: `site-packages/shioaji/utils.py`
+
+The Shioaji SDK sends error logs to Sentry by default. When an error occurs, the SDK uploads error messages to `sentry.io` (project ID: 1371618).
+
+**To disable error tracking:**
+
+Option 1: Environment variable
+```bash
+export LOG_SENTRY=False
+```
+
+Option 2: Login parameter
+```python
+api.login(..., error_tracking=False)
+```
