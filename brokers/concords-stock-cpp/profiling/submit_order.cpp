@@ -1,10 +1,10 @@
 /**
- * Place order with timing markers.
+ * Submit order with timing markers.
  *
  * Usage:
- *     ./place_order                              # Uses order_config.toml
- *     ./place_order --no-timing                  # Disable timing markers
- *     ./place_order --config order_config.toml   # Use custom config file
+ *     ./submit_order                              # Uses order_config.toml
+ *     ./submit_order --no-timing                  # Disable timing markers
+ *     ./submit_order --config order_config.toml   # Use custom config file
  */
 
 #include <toml++/toml.h>
