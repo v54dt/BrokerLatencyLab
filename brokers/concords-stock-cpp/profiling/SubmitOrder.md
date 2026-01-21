@@ -73,28 +73,13 @@ sequenceDiagram
 #### Processing Time
 - **Average**: 1.1ms (local CPU processing, excluding network wait)
 
-#### Syscalls
-
-| Syscall | Description |
-|---------|-------------|
-| sendmsg | Send gRPC request over TLS |
-| recvmsg | Receive gRPC response over TLS |
-| epoll_wait | Wait for network events |
-
-The SDK uses gRPC over TLS for communication. During `SubmitOrder()`:
-
-1. **sendmsg**: Sends the order request (520 bytes, TLS encrypted)
-2. **epoll_wait**: Waits for server response (~5-20 ms per wait)
-3. **recvmsg**: Receives ACK and order state responses
-
 #### Network Timeline
 
-```
-t=0.000 ms  sendmsg (order request)
-t=0.1 ms    epoll_wait (waiting for ACK)
-t=6.2 ms    recvmsg (ACK from Frontend)
-t=8.1 ms    sendmsg (acknowledgement)
-t=13.2 ms   recvmsg (order state from Midend)
-t=33.0 ms   recvmsg (final response)
-t=34.0 ms   return
-```
+| Time (ms) | Syscall | Size | Description |
+|-----------|---------|------|-------------|
+| 0.0 | sendmsg | 520 bytes | Submit order request |
+| 0.1 | epoll_wait | - | Waiting for ACK |
+| 6.2 | recvmsg | 48 bytes | gRPC HEADERS / HTTP/2 ACK |
+| 8.1 | recvmsg | 130 bytes | ACK from Frontend |
+| 33.0 | recvmsg | 230 bytes | Response from Midend |
+| 34.0 | return | - | SubmitOrder() returns |
