@@ -13,14 +13,11 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-ORDER_SUBMITTED_STATUSES = ["PendingSubmit", "PreSubmitted", "Submitted"]
-ORDER_CANCELLED_STATUSES = ["Cancelled"]
-ORDER_FILLED_STATUSES = ["Filled", "PartFilled"]
-ORDER_FAILED_STATUSES = ["Failed"]
-
 # Timeout constants
 ORDER_TIMEOUT = 10
 CANCEL_TIMEOUT = 10
+
+TAIWAN_TZ = timezone(timedelta(hours=8))
 
 
 class LatencyMeasurement:
@@ -38,7 +35,7 @@ class LatencyMeasurement:
 
         self.current_trade = None
         self.current_symbol = None
-        self.current_action = None
+        self.current_action_str = None
         self.current_price = None
         self.current_quantity = None
 
@@ -53,7 +50,6 @@ class LatencyMeasurement:
         self._price_type_map = {
             "LMT": sj.constant.StockPriceType.LMT,
             "MKT": sj.constant.StockPriceType.MKT,
-            "MKP": sj.constant.StockPriceType.MKP,
         }
         self._order_type_map = {
             "ROD": sj.constant.OrderType.ROD,
@@ -65,6 +61,11 @@ class LatencyMeasurement:
             "IntradayOdd": sj.constant.StockOrderLot.IntradayOdd,
             "Odd": sj.constant.StockOrderLot.Odd,
             "Fixing": sj.constant.StockOrderLot.Fixing,
+        }
+        self._order_cond_map = {
+            "Cash": sj.constant.StockOrderCond.Cash,
+            "MarginTrading": sj.constant.StockOrderCond.MarginTrading,
+            "ShortSelling": sj.constant.StockOrderCond.ShortSelling,
         }
 
         self.api.set_order_callback(self._order_callback)
@@ -81,6 +82,7 @@ class LatencyMeasurement:
                 "price_type",
                 "order_type",
                 "order_lot",
+                "order_cond",
             ],
             "trading_hours": ["start_time", "end_time", "interval_seconds"],
             "api": ["url", "broker_name"],
@@ -123,7 +125,6 @@ class LatencyMeasurement:
                 f"Order callback: op_type={op_type}, op_code={op_code}, order_id={order_id}"
             )
 
-            # Check if this is our current order
             if not self.current_trade or order_id != self.current_trade.order.id:
                 return
 
@@ -146,21 +147,22 @@ class LatencyMeasurement:
         """
         end_time = time.perf_counter()
         self.measured_latency_ms = (end_time - self.order_start_time) * 1000
+        logger.info(f"Round-trip latency: {self.measured_latency_ms:.2f} ms")
 
         op_code = operation.get("op_code", "")
         op_msg = operation.get("op_msg", "")
 
+        # "00" = success, others = fail
         if op_code != "00":
-            logger.error(f"Order rejected: {op_msg}")
+            logger.error(f"Order failed: {op_msg} (op_code: {op_code})")
             self.order_event.set()
             return
 
-        logger.info(f"Order confirmed by exchange!")
-        logger.info(f"  Order ID: {order.get('id')}")
-        logger.info(f"  Op code: {op_code}")
-        logger.info(f"  Round-trip latency: {self.measured_latency_ms:.2f} ms")
+        if self.current_action_str == "buy":
+            side = "B"
+        else:
+            side = "S"
 
-        side = "B" if self.current_action == "buy" else "S"
         self.send_latency_report(
             symbol=self.current_symbol,
             side=side,
@@ -171,7 +173,7 @@ class LatencyMeasurement:
 
         self.order_event.set()
 
-        threading.Thread(target=self._cancel_order_async, daemon=True).start()
+        self._cancel_order()
 
     def _handle_order_cancelled(self, operation, order):
         """Handle order cancellation confirmation."""
@@ -189,16 +191,12 @@ class LatencyMeasurement:
 
             self.cancel_event.set()
 
-    def _cancel_order_async(self):
-        """Cancel order immediately (called from Thread)."""
+    def _cancel_order(self):
         try:
             if not self.current_trade:
                 return
 
-            logger.info(f"Cancelling order {self.current_trade.order.id}...")
             result = self.api.cancel_order(self.current_trade)
-
-            self.api.update_status(self.account)
 
             if result:
                 logger.info(
@@ -230,7 +228,6 @@ class LatencyMeasurement:
             self.api.activate_ca(
                 ca_path=ca_cert_path,
                 ca_passwd=ca_password,
-                person_id=self.api.person_id(),
             )
             logger.info("Login and CA activation successful")
 
@@ -299,10 +296,15 @@ class LatencyMeasurement:
         if order_lot_str not in self._order_lot_map:
             raise ValueError(f"Invalid order lot: {order_lot_str}")
 
+        order_cond_str = self.config["order"]["order_cond"]
+        if order_cond_str not in self._order_cond_map:
+            raise ValueError(f"Invalid order cond: {order_cond_str}")
+
         return (
             self._price_type_map[price_type_str],
             self._order_type_map[order_type_str],
             self._order_lot_map[order_lot_str],
+            self._order_cond_map[order_cond_str],
         )
 
     def submit_order(self, symbol, action, price, quantity):
@@ -314,7 +316,7 @@ class LatencyMeasurement:
                 return False
 
             action_const = self._parse_action(action)
-            price_type, order_type, order_lot = self._parse_order_params()
+            price_type, order_type, order_lot, order_cond = self._parse_order_params()
 
             order = self.api.Order(
                 price=price,
@@ -323,6 +325,7 @@ class LatencyMeasurement:
                 price_type=price_type,
                 order_type=order_type,
                 order_lot=order_lot,
+                order_cond=order_cond,
                 account=self.account,
             )
 
@@ -333,7 +336,7 @@ class LatencyMeasurement:
             self.cancel_event.clear()
 
             self.current_symbol = symbol
-            self.current_action = action.lower()
+            self.current_action_str = action.lower()
             self.current_price = price
             self.current_quantity = quantity
 
@@ -344,16 +347,60 @@ class LatencyMeasurement:
                 return False
 
             self.current_trade = trade
-            logger.info(f"Order sent to exchange")
-            logger.info(f"  Order ID: {trade.order.id}")
-            logger.info(f"  Initial status: {trade.status.status}")
-            logger.info(f"Waiting for exchange confirmation...")
 
+            # Wait for callback, but if timeout, check status manually
             if not self.order_event.wait(timeout=ORDER_TIMEOUT):
-                logger.error("Order submission timeout")
-                return False
+                logger.warning("No callback received, checking status manually...")
 
-            logger.info(f"Waiting for order cancellation...")
+                # Update status and check if order is PreSubmitted/Submitted
+                self.api.update_status(self.account)
+                trades = self.api.list_trades()
+
+                current_order = None
+                for t in trades:
+                    if t.order.id == trade.order.id:
+                        current_order = t
+                        break
+
+                if not current_order:
+                    logger.error("Order not found in trades list")
+                    return False
+
+                logger.info(f"Manual status check: {current_order.status.status}")
+
+                # If order is PreSubmitted or Submitted, trigger callback manually
+                if str(current_order.status.status) in [
+                    "Status.PreSubmitted",
+                    "Status.Submitted",
+                ]:
+                    logger.info("Order confirmed via manual status check")
+                    self.current_trade = current_order
+
+                    # Calculate latency (approximate, since callback was delayed)
+                    end_time = time.perf_counter()
+                    self.measured_latency_ms = (end_time - self.order_start_time) * 1000
+                    logger.info(
+                        f"  Round-trip latency (approx): {self.measured_latency_ms:.2f} ms"
+                    )
+
+                    # Send report and cancel
+                    side = "B" if self.current_action_str == "buy" else "S"
+                    self.send_latency_report(
+                        symbol=self.current_symbol,
+                        side=side,
+                        price=self.current_price,
+                        volume=self.current_quantity,
+                        latency_ms=self.measured_latency_ms,
+                    )
+
+                    self._cancel_order()
+                else:
+                    logger.error(
+                        f"Order in unexpected status: {current_order.status.status}"
+                    )
+                    return False
+
+            logger.info(f"Waiting for cancel confirmation...")
 
             if not self.cancel_event.wait(timeout=CANCEL_TIMEOUT):
                 logger.error("Order cancellation timeout")
@@ -400,14 +447,12 @@ class LatencyMeasurement:
 
     def get_current_time_hhmm(self):
         """Get current time in HHMM format (Taiwan timezone UTC+8)."""
-        taiwan_tz = timezone(timedelta(hours=8))
-        taiwan_time = datetime.now(taiwan_tz)
+        taiwan_time = datetime.now(TAIWAN_TZ)
         return taiwan_time.hour * 100 + taiwan_time.minute
 
     def is_weekday(self):
         """Check if today is a weekday (Monday-Friday)."""
-        taiwan_tz = timezone(timedelta(hours=8))
-        taiwan_time = datetime.now(taiwan_tz)
+        taiwan_time = datetime.now(TAIWAN_TZ)
         return taiwan_time.weekday() < 5
 
     def run_latency_test(self):
