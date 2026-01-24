@@ -61,7 +61,7 @@ sequenceDiagram
 #### Measurement Scope
 - **Start**: Before `api.place_order()` call
 - **End**: After `api.place_order()` returns
-- **Includes**: Local CPU processing + network round-trip time
+- **Includes**: User space processing + network round-trip time
 
 #### Tools
 - `perf record` with DWARF call graph for CPU profiling (1000 Hz sampling)
@@ -71,7 +71,7 @@ sequenceDiagram
 ### Results
 
 #### Processing Time
-- **Average**: 4-6 ms (local CPU processing, excluding network wait)
+- **Average**: 4-6 ms (user space processing, excluding network wait)
 - **Network polling**: Shioaji SDK Solace client uses 50ms polling interval
 
 #### CPU Usage by Shared Object
