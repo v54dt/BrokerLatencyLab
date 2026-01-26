@@ -63,6 +63,8 @@ sequenceDiagram
 - **End**: After `api.place_order()` returns
 - **Includes**: User space processing + network round-trip time
 
+> **Note**: The async callback RTT (`set_order_callback`) is similar to the blocking `place_order()` return time, so no separate analysis was performed.
+
 #### Tools
 - `perf record` with DWARF call graph for CPU profiling (1000 Hz sampling)
 - `strace` for syscall analysis
