@@ -9,6 +9,7 @@ A multi-broker trading latency measurement and analysis for Taiwan securities ma
 | Sinotrade              | Stock  | Python         | Done        |
 | Concords               | Stock  | C++, Python    | Done        |
 | Fubon Neo              | Stock  | C++            | In Progress |
+| Fubon Neo(Fugle)       | Stock  | Python         | In Progress |
 | Masterlink Nova(Fugle) | Stock  | Python         | In Progress |
 
 ## Architecture
