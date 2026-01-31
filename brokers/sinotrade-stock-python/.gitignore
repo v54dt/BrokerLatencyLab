@@ -9,3 +9,9 @@ venv/
 
 # Logs
 *.log
+
+# PFX
+*.pfx
+
+# Environment Values
+.env

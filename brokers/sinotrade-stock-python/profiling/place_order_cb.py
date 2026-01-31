@@ -1,22 +1,24 @@
 """
-Place order and handle callback with timing markets.
+Place order and handle callback with timing markers.
 
 Usage:
     python place_order_cb.py
     python place_order_cb.py --no-timing
-    python place_order_cb.py --config order_config.toml
+    python place_order_cb.py --config /path/to/config.toml
 """
 
-import shioaji as sj
-import time
-import sys
-import os
 import argparse
-import tomllib
-from dotenv import load_dotenv
+import sys
+import time
 from pathlib import Path
+
 from shioaji.constant import OrderState
+
+from common import init_api, load_config, create_order
 from shioaji_types import StockOrderEvent, StockDealEvent
+
+BASE_DIR = Path(__file__).parent.parent
+DEFAULT_CONFIG = BASE_DIR / "config.toml"
 
 
 def stock_order_handler(event: StockOrderEvent):
@@ -41,53 +43,20 @@ def order_cb(stat: OrderState, msg: dict):
     elif stat == OrderState.StockDeal:
         stock_deal_handler(msg)
     elif stat == OrderState.FuturesOrder:
-        print(f"Futures Order")
+        print("Futures Order")
     elif stat == OrderState.FuturesDeal:
-        print(f"Futures Deal")
+        print("Futures Deal")
     else:
-        print(f"Unknown Order State")
+        print("Unknown Order State")
 
 
-def main(enable_timing: bool = True, config_path: str = None):
+def main(enable_timing: bool = True, config_path: str | Path = None):
     """Execute place_order with callback"""
-    load_dotenv()
-
     if config_path is None:
-        config_path = Path(__file__).parent / "order_config.toml"
-    else:
-        config_path = Path(config_path)
-
-    with open(config_path, "rb") as f:
-        config = tomllib.load(f)
-
-        # Initialize shioaji sdk and Login
-    api = sj.Shioaji()
-    api.login(
-        api_key=os.environ["API_KEY"],
-        secret_key=os.environ["SECRET_KEY"],
-    )
-
-    ca_path = os.environ["CA_CERT_PATH"]
-    if not os.path.isabs(ca_path):
-        parent_dir = Path(__file__).parent.parent
-        ca_path = str(parent_dir / ca_path)
-
-    api.activate_ca(
-        ca_path=ca_path,
-        ca_passwd=os.environ["CA_PASSWORD"],
-    )
-
-    contract = api.Contracts.Stocks[config["contract"]["stock_id"]]
-    order = api.Order(
-        price=config["order"]["price"],
-        quantity=config["order"]["quantity"],
-        action=getattr(sj.constant.Action, config["order"]["action"]),
-        price_type=getattr(sj.constant.StockPriceType, config["order"]["price_type"]),
-        order_type=getattr(sj.constant.OrderType, config["order"]["order_type"]),
-        order_lot=getattr(sj.constant.StockOrderLot, config["order"]["order_lot"]),
-        order_cond=getattr(sj.constant.StockOrderCond, config["order"]["order_cond"]),
-        account=api.stock_account,
-    )
+        config_path = DEFAULT_CONFIG
+    config = load_config(config_path)
+    api = init_api(BASE_DIR)
+    contract, order = create_order(api, config)
 
     # Register order callback
     api.set_order_callback(order_cb)
@@ -97,7 +66,11 @@ def main(enable_timing: bool = True, config_path: str = None):
         start_ns = time.perf_counter_ns()
         print(f"===START={start_ns}===", file=sys.stderr, flush=True)
 
-    trade = api.place_order(contract, order)
+    try:
+        trade = api.place_order(contract, order)
+    except Exception as e:
+        print(f"Place order failed: {e}", file=sys.stderr)
+        return None
 
     if enable_timing:
         end_ns = time.perf_counter_ns()
@@ -108,7 +81,10 @@ def main(enable_timing: bool = True, config_path: str = None):
     time.sleep(3)
 
     # Cancel order to close
-    api.cancel_order(trade=trade)
+    try:
+        api.cancel_order(trade=trade)
+    except Exception as e:
+        print(f"Cancel order failed: {e}", file=sys.stderr)
 
     print("Waiting for cancel callback...", flush=True)
     time.sleep(3)
@@ -127,7 +103,7 @@ if __name__ == "__main__":
         "--config",
         type=str,
         default=None,
-        help="Path to order config (default: order_config.toml)",
+        help="Path to order config (default: ../config.toml)",
     )
     args = parser.parse_args()
     main(enable_timing=not args.no_timing, config_path=args.config)

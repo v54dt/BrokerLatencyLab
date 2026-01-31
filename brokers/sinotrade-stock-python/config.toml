@@ -1,26 +1,18 @@
-# examples
-
 [trading_hours]
 start_time = "08:30"
 end_time = "13:30"
-interval_seconds = 3
+interval_seconds = 300
 
 [order]
-symbol = "6016"
-price = 11.0
+symbol = "2897"
+price = 8.62
 quantity = 1
-action = "Buy"  # Buy or Sell
-price_type = "LMT"  # LMT (限價), MKT (市價), MKP (範圍市價)
-order_type = "ROD"  # TimeInForce: ROD, IOC, FOK
-order_lot = "Common"  # Common (整股), IntradayOdd (盤中零股), Odd (盤後零股), Fixing (定盤)
-account_index = 0  # Index of stock account to use
+action = "Buy"       # Buy or Sell
+price_type = "LMT"   # LMT (限價), MKT (市價)
+order_type = "ROD"   # TimeInForce: ROD, IOC, FOK
+order_lot = "Common" # Common (整股), IntradayOdd (盤中零股), Odd (盤後零股), Fixing (定盤)
+order_cond = "Cash"  # Cash (現股), MarginTrading (融資), ShortSelling (融券)
 
 [api]
 url = ""
 broker_name = "sinotrade-stock-python"
-
-[user]
-api_key = ""
-secret_key = ""
-ca_cert_path = ""
-ca_password = ""
