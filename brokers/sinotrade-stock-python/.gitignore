@@ -15,3 +15,7 @@ venv/
 
 # Environment Values
 .env
+
+# Profiling output
+profiling/output*/
+profiling/FlameGraph/
