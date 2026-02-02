@@ -18,4 +18,8 @@ sequenceDiagram
     AWS Taipei->>Server:
     Server->>AWS Taipei:
     Note left of AWS Taipei: RTT=6.4ms
+
+    AWS Taipei->>Exchange:
+    Exchange->>AWS Taipei:
+    Note left of AWS Taipei: RTT=27.7ms
 ```

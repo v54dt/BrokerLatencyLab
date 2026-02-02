@@ -33,7 +33,7 @@ sequenceDiagram
 
     AWS Taipei->>Endpoint:
     Endpoint->>AWS Taipei:
-    Note left of AWS Taipei: RTT=5ms
+    Note left of AWS Taipei: RTT=2.7ms
 
     AWS Taipei->>Midend:
     Midend->>AWS Taipei:
