@@ -1,0 +1,10 @@
+[order]
+symbol = "2897"
+price = 8.3
+quantity = 1000
+action = "Buy"
+market_type = "Common"
+price_type = "Limit"
+time_in_force = "ROD"
+order_type = "Stock"
+user_def = "None"
