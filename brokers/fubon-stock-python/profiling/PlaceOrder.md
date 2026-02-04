@@ -4,6 +4,8 @@
 
 ## Round Trip Time
 
+Endpoint: `neoapi.fbs.com.tw:443`
+
 ```mermaid
 sequenceDiagram
     participant AWS Taipei
