@@ -1,17 +1,21 @@
-# Python cache
-__pycache__/
-*.pyc
+# Python
 
-# Virtual environments
+**pycache**/
+\*.pyc
 venv/
 .venv/
 
 # Git
+
 .git/
 .gitignore
 
-# Documentation
-README.md
+# Profiling
 
-# Logs
-*.log
+profiling/
+
+# Sensitive
+
+.env
+_.pfx
+_.log

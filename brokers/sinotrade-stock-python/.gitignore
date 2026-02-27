@@ -1,21 +1,13 @@
 # Python
 __pycache__/
 *.pyc
-*.pyo
-
-# Virtual environments
 venv/
 .venv/
 
+# Sensitive
+.env
+*.pfx
+config.toml
+
 # Logs
 *.log
-
-# PFX
-*.pfx
-
-# Environment Values
-.env
-
-# Profiling output
-profiling/output*/
-profiling/FlameGraph/
