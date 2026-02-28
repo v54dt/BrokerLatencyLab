@@ -2,9 +2,9 @@
  * Submit order with timing markers.
  *
  * Usage:
- *     ./submit_order                              # Uses order_config.toml
- *     ./submit_order --no-timing                  # Disable timing markers
- *     ./submit_order --config order_config.toml   # Use custom config file
+ *     ./submit_order                                    # Default config
+ *     ./submit_order --no-timing                        # Disable timing markers
+ *     ./submit_order --config config.toml               # Custom config file
  */
 
 #include <toml++/toml.h>
@@ -14,121 +14,79 @@
 #include <condition_variable>
 #include <cstdint>
 #include <cstring>
-#include <filesystem>
 #include <iostream>
-#include <memory>
 #include <mutex>
 #include <thread>
 
-#include "stock-client/order.h"
+#include "order_parsers.h"
 #include "stock-client/stock_client.h"
 
 using namespace concordsapi::stockclient;
 
-Market parseMarket(const std::string& str) {
-  if (str == "TSE") return Market::TSE;
-  if (str == "OTC") return Market::OTC;
-  std::cerr << "Invalid market: " << str << std::endl;
-  exit(1);
-}
-
-OrderBoard parseOrderBoard(const std::string& str) {
-  if (str == "RoundLot") return OrderBoard::RoundLot;
-  if (str == "OddLot") return OrderBoard::OddLot;
-  if (str == "PostMarket_Fixed") return OrderBoard::PostMarket_Fixed;
-  if (str == "PostMarket_OddLot") return OrderBoard::PostMarket_OddLot;
-  std::cerr << "Invalid order_board: " << str << std::endl;
-  exit(1);
-}
-
-FundingType parseFundingType(const std::string& str) {
-  if (str == "Cash") return FundingType::Cash;
-  if (str == "MarginBuy") return FundingType::MarginBuy;
-  if (str == "MarginShortSell") return FundingType::MarginShortSell;
-  std::cerr << "Invalid funding_type: " << str << std::endl;
-  exit(1);
-}
-
-Side parseSide(const std::string& str) {
-  if (str == "Buy" || str == "B") return Side::Buy;
-  if (str == "Sell" || str == "S") return Side::Sell;
-  std::cerr << "Invalid side: " << str << std::endl;
-  exit(1);
-}
-
-OrderType parseOrderType(const std::string& str) {
-  if (str == "Limit") return OrderType::Limit;
-  if (str == "Market") return OrderType::Market;
-  std::cerr << "Invalid order_type: " << str << std::endl;
-  exit(1);
-}
-
-TimeInForce parseTimeInForce(const std::string& str) {
-  if (str == "ROD") return TimeInForce::ROD;
-  if (str == "IOC") return TimeInForce::IOC;
-  if (str == "FOK") return TimeInForce::FOK;
-  std::cerr << "Invalid time_in_force: " << str << std::endl;
-  exit(1);
-}
-
-DaytradeShortSell parseDaytradeShortSell(const std::string& str) {
-  if (str == "True" || str == "Y") return DaytradeShortSell::True;
-  if (str == "False" || str == "N") return DaytradeShortSell::False;
-  std::cerr << "Invalid daytrade_shortsell: " << str << std::endl;
-  exit(1);
-}
-
-std::string find_config_file(const char* arg_config) {
-  if (arg_config) {
-    return arg_config;
+template <typename T>
+T get_config(const toml::table& config, const char* section, const char* key) {
+  auto val = config[section][key].value<T>();
+  if (!val) {
+    std::cerr << "ERROR: Missing config key: " << section << "." << key
+              << std::endl;
+    exit(1);
   }
-
-  return "order_config.toml";
+  return *val;
 }
 
 int main(int argc, char* argv[]) {
   bool enable_timing = true;
-  const char* config_path = nullptr;
+  const char* config_path = "config.toml";
 
   for (int i = 1; i < argc; i++) {
     if (strcmp(argv[i], "--no-timing") == 0) {
       enable_timing = false;
     } else if (strcmp(argv[i], "--config") == 0 && i + 1 < argc) {
-      config_path = argv[i + 1];
-      i++;
+      config_path = argv[++i];
     }
   }
 
-  std::string config_file = find_config_file(config_path);
-  auto config = toml::parse_file(config_file);
+  toml::table config;
+  try {
+    config = toml::parse_file(config_path);
+  } catch (const toml::parse_error& err) {
+    std::cerr << "ERROR: Failed to parse " << config_path << ": "
+              << err.description() << std::endl;
+    return 1;
+  }
 
-  std::string user_id = *config["user"]["user_id"].value<std::string>();
-  std::string password = *config["user"]["password"].value<std::string>();
-  std::string account = *config["user"]["account"].value<std::string>();
+  // Load credentials
+  std::string user_id = get_config<std::string>(config, "user", "user_id");
+  std::string password = get_config<std::string>(config, "user", "password");
+  std::string account = get_config<std::string>(config, "user", "account");
   std::string pfx_filepath =
-      *config["user"]["pfx_filepath"].value<std::string>();
+      get_config<std::string>(config, "user", "pfx_filepath");
   std::string pfx_password =
-      *config["user"]["pfx_password"].value<std::string>();
+      get_config<std::string>(config, "user", "pfx_password");
 
   auto client =
       BuildStockClient(user_id.c_str(), password.c_str(), account.c_str(),
                        pfx_filepath.c_str(), pfx_password.c_str());
 
-  std::string symbol = *config["order"]["symbol"].value<std::string>();
-  std::string price = *config["order"]["price"].value<std::string>();
-  std::string quantity = *config["order"]["quantity"].value<std::string>();
-  Market market = parseMarket(*config["order"]["market"].value<std::string>());
+  // Load order parameters
+  std::string symbol = get_config<std::string>(config, "order", "symbol");
+  std::string price =
+      std::to_string(get_config<double>(config, "order", "price"));
+  std::string quantity =
+      std::to_string(get_config<int>(config, "order", "quantity"));
+  Market market =
+      parseMarket(get_config<std::string>(config, "order", "market"));
   OrderBoard order_board =
-      parseOrderBoard(*config["order"]["order_board"].value<std::string>());
-  FundingType funding_type =
-      parseFundingType(*config["order"]["funding_type"].value<std::string>());
-  Side side = parseSide(*config["order"]["side"].value<std::string>());
+      parseOrderBoard(get_config<std::string>(config, "order", "order_board"));
+  FundingType funding_type = parseFundingType(
+      get_config<std::string>(config, "order", "funding_type"));
+  Side side = parseSide(get_config<std::string>(config, "order", "side"));
   OrderType order_type =
-      parseOrderType(*config["order"]["order_type"].value<std::string>());
-  TimeInForce time_in_force =
-      parseTimeInForce(*config["order"]["time_in_force"].value<std::string>());
+      parseOrderType(get_config<std::string>(config, "order", "order_type"));
+  TimeInForce time_in_force = parseTimeInForce(
+      get_config<std::string>(config, "order", "time_in_force"));
   DaytradeShortSell daytrade_shortsell = parseDaytradeShortSell(
-      *config["order"]["daytrade_shortsell"].value<std::string>());
+      get_config<std::string>(config, "order", "daytrade_shortsell"));
 
   OrderInfo order_info(market, order_board, funding_type, symbol, side,
                        order_type, time_in_force, quantity, price,

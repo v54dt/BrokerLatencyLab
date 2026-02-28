@@ -1,0 +1,196 @@
+"""
+Profiling CLI for submit_order latency analysis.
+
+Usage:
+    python3 profile_submit_order.py --tool strace
+    sudo -E python3 profile_submit_order.py --tool perf
+    sudo -E python3 profile_submit_order.py --tool perf --iterations 5
+"""
+
+import argparse
+import statistics
+import sys
+from pathlib import Path
+
+from profilers import BaseProfiler, StraceProfiler, PerfProfiler
+from runner import ProfilingRunner
+from report import ReportGenerator
+
+
+SCRIPT_DIR = Path(__file__).parent
+DEFAULT_TEST_BINARY = SCRIPT_DIR / "build" / "submit_order"
+FLAMEGRAPH_DIR = SCRIPT_DIR / "FlameGraph"
+
+
+PROFILERS = ("strace", "perf")
+
+
+def create_profiler(tool: str, output_dir: Path) -> BaseProfiler:
+    """Create a single profiler instance."""
+    if tool == "perf":
+        return PerfProfiler(output_dir=output_dir)
+    elif tool == "strace":
+        return StraceProfiler(output_dir=output_dir)
+    else:
+        raise ValueError(f"Unknown tool: {tool}")
+
+
+def run_single(
+    output_dir: Path,
+    test_binary: Path,
+    tool: str,
+    verbose: bool = False,
+) -> dict:
+    """Run a single profiling iteration with one tool."""
+
+    profiler = create_profiler(tool, output_dir)
+
+    runner = ProfilingRunner(output_dir=output_dir, profiler=profiler, verbose=verbose)
+    result = runner.run(test_binary)
+
+    # Generate flamegraph if perf is used and FlameGraph tools exist
+    if tool == "perf" and FLAMEGRAPH_DIR.exists():
+        if verbose:
+            print("  Generating flamegraph...")
+        svg_path = profiler.generate_flamegraph(FLAMEGRAPH_DIR)
+        if svg_path and verbose:
+            print(f"  Flamegraph saved to: {svg_path}")
+
+    # Generate reports
+    if verbose:
+        print("  Generating reports...")
+    reporter = ReportGenerator(result)
+    reporter.save_reports()
+
+    if verbose:
+        print()
+        print(reporter.generate_text_report())
+
+    return reporter.generate_json_report()
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Profile submit_order with modular profiling tools",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  python3 profile_submit_order.py --tool strace --iterations 5
+  sudo -E python3 profile_submit_order.py --tool perf --iterations 5
+
+Available tools:
+  strace    - Syscall tracing (network wait analysis)
+  perf      - CPU sampling (library/function breakdown)
+        """,
+    )
+
+    parser.add_argument(
+        "--tool",
+        type=str,
+        required=True,
+        choices=PROFILERS,
+        help="Profiling tool to use",
+    )
+    parser.add_argument(
+        "--iterations",
+        type=int,
+        default=5,
+        help="Number of profiling iterations (default: 5)",
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=str,
+        default="output",
+        help="Output directory (default: output)",
+    )
+    parser.add_argument(
+        "--binary",
+        type=str,
+        default=None,
+        help="Path to test binary (default: build/submit_order)",
+    )
+    parser.add_argument(
+        "--verbose",
+        "-v",
+        action="store_true",
+        help="Show detailed output",
+    )
+
+    args = parser.parse_args()
+
+    # Parse test binary
+    test_binary = Path(args.binary) if args.binary else DEFAULT_TEST_BINARY
+    if not test_binary.exists():
+        print(f"ERROR: Test binary not found: {test_binary}", file=sys.stderr)
+        sys.exit(1)
+
+    # Run iterations
+    results = []
+    for i in range(args.iterations):
+        iter_num = i + 1
+        print(f"[{iter_num}/{args.iterations}] {args.tool}...", end=" ", flush=True)
+
+        if args.verbose:
+            print()
+
+        output_dir = Path(args.output_dir) / f"iter_{iter_num}"
+        try:
+            result = run_single(
+                output_dir=output_dir,
+                test_binary=test_binary,
+                tool=args.tool,
+                verbose=args.verbose,
+            )
+        except ValueError as e:
+            print(f"FAILED ({e})")
+            continue
+        results.append(result)
+
+        total_ms = result["timing"]["total_ms"]
+        print(f"done ({total_ms:.1f} ms)")
+
+    if not results:
+        print("\nERROR: All iterations failed", file=sys.stderr)
+        sys.exit(1)
+
+    # Summary statistics
+    total_times = [r["timing"]["total_ms"] for r in results]
+    network_times = [r["timing"]["network_ms"] for r in results]
+    local_times = [r["timing"]["local_ms"] for r in results]
+
+    print()
+    summary_lines = [
+        "SUMMARY",
+        "=" * 40,
+        f"Tool: {args.tool}",
+        f"Iterations: {args.iterations}",
+    ]
+
+    if len(total_times) > 1:
+        summary_lines.extend(
+            [
+                f"Total:   {statistics.mean(total_times):.1f} ms "
+                f"(std={statistics.stdev(total_times):.1f})",
+                f"Network: {statistics.mean(network_times):.1f} ms "
+                f"(std={statistics.stdev(network_times):.1f})",
+                f"Local:   {statistics.mean(local_times):.1f} ms "
+                f"(std={statistics.stdev(local_times):.1f})",
+            ]
+        )
+    else:
+        summary_lines.append(f"Total: {total_times[0]:.1f} ms")
+
+    summary_text = "\n".join(summary_lines)
+    print(summary_text)
+
+    # Save summary
+    summary_path = Path(args.output_dir) / "SUMMARY.txt"
+    summary_path.parent.mkdir(parents=True, exist_ok=True)
+    summary_path.write_text(summary_text + "\n")
+
+    print()
+    print(f"Results saved to {args.output_dir}/")
+
+
+if __name__ == "__main__":
+    main()

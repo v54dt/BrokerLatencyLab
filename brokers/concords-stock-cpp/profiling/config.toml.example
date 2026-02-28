@@ -1,0 +1,18 @@
+[user]
+user_id = "user_id"
+password = "user_password"
+account = "account_id"
+pfx_filepath = "pfx_path"
+pfx_password = "pfx_password"
+
+[order]
+symbol = "2330"
+price = 2000
+quantity = 1
+side = "Buy"
+market = "TSE"
+order_board = "RoundLot"
+funding_type = "Cash"
+order_type = "Limit"
+time_in_force = "ROD"
+daytrade_shortsell = "False"

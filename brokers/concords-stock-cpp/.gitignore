@@ -1,0 +1,12 @@
+# Build
+build/
+
+# Credentials
+*.pfx
+config.toml
+
+# SDK
+lib/
+
+# Logs
+*.log
