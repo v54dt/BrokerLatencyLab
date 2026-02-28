@@ -1,0 +1,17 @@
+# Git
+
+.git/
+.gitignore
+
+# Profiling
+
+profiling/
+
+# Credentials
+
+*.pfx
+*.log
+
+# Build
+
+build/
