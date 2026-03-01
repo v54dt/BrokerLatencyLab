@@ -1,65 +1,68 @@
-import fubon_neo
-import time
-import sys
-import os
+"""
+Submit order with timing markers.
+
+Usage:
+    python place_order.py                        # Default config
+    python place_order.py --no-timing            # Disable timing markers
+    python place_order.py --config config.toml   # Custom config file
+"""
+
 import argparse
+import sys
+import time
 import tomllib
 from pathlib import Path
 
+import fubon_neo
 from fubon_neo.sdk import FubonSDK, Order
-from dotenv import load_dotenv
 
-BASE_DIR = Path(__file__).parent.parent
-DEFAULT_CONFIG = BASE_DIR / "config.toml"
+SCRIPT_DIR = Path(__file__).parent
+DEFAULT_CONFIG = SCRIPT_DIR / "config.toml"
 
 
 def load_config(config_path: str | Path) -> dict:
-    """Load configuration from TOML file."""
-
     config_path = Path(config_path)
     if not config_path.exists():
-        raise SystemExit(f"Config file not found: {config_path}")
+        print(f"ERROR: Config file not found: {config_path}", file=sys.stderr)
+        sys.exit(1)
     with open(config_path, "rb") as f:
         return tomllib.load(f)
 
 
-def del_order(sdk, order_no, account):
-
-    target_order = None
+def cancel_order(sdk, order_no, account):
     orders = sdk.stock.get_order_results(account)
 
+    target_order = None
     for order in orders.data:
         if order.order_no == order_no:
             target_order = order
 
     if target_order is None:
+        print("ERROR: Order not found for cancellation", file=sys.stderr)
         return None
-    else:
-        response = sdk.stock.cancel_order(account, target_order)
-        return response
+
+    return sdk.stock.cancel_order(account, target_order)
 
 
 def main(enable_timing: bool = True, config_path: str | Path = None):
-    """Execute place_order"""
-
     if config_path is None:
         config_path = DEFAULT_CONFIG
 
     config = load_config(config_path)
 
-    load_dotenv()
-
     sdk = FubonSDK()
     accounts = sdk.login(
-        os.environ["USER_ID"],
-        os.environ["USER_PASSWORD"],
-        os.environ["CA_CERT_PATH"],
-        os.environ["CA_PASSWORD"],
+        config["user"]["user_id"],
+        config["user"]["password"],
+        config["user"]["pfx_filepath"],
+        config["user"]["pfx_password"],
     )
 
     if not accounts.is_success:
-        print(f"Login failed: {accounts.message}")
+        print(f"ERROR: Login failed: {accounts.message}", file=sys.stderr)
         return
+
+    account = accounts.data[0]
 
     order = Order(
         buy_sell=getattr(fubon_neo.constant.BSAction, config["order"]["action"]),
@@ -74,23 +77,25 @@ def main(enable_timing: bool = True, config_path: str | Path = None):
             fubon_neo.constant.TimeInForce, config["order"]["time_in_force"]
         ),
         order_type=getattr(fubon_neo.constant.OrderType, config["order"]["order_type"]),
-        user_def=None,
     )
 
     if enable_timing:
         start_ns = time.perf_counter_ns()
         print(f"===START={start_ns}===", file=sys.stderr, flush=True)
-    order_response = sdk.stock.place_order(accounts.data[0], order)
+
+    order_response = sdk.stock.place_order(account, order)
 
     if enable_timing:
         end_ns = time.perf_counter_ns()
         print(f"===END={end_ns}===", file=sys.stderr, flush=True)
         print(f"TOTAL_NS={end_ns - start_ns}", file=sys.stderr, flush=True)
 
-    response = del_order(sdk, order_response.data.order_no, accounts.data[0])
+    if not order_response.is_success:
+        print(f"ERROR: Place order failed: {order_response.message}", file=sys.stderr)
+        return
 
-    if response is None:
-        print("Cancel order failed")
+    time.sleep(1)
+    cancel_order(sdk, order_response.data.order_no, account)
 
 
 if __name__ == "__main__":
@@ -102,7 +107,7 @@ if __name__ == "__main__":
         "--config",
         type=str,
         default=None,
-        help="Path to order config (default: ../config.toml)",
+        help="Path to config (default: config.toml)",
     )
     args = parser.parse_args()
     main(enable_timing=not args.no_timing, config_path=args.config)

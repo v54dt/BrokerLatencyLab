@@ -1,0 +1,15 @@
+[user]
+user_id = "user_id"
+password = "password"
+pfx_filepath = "cert.pfx"
+pfx_password = "pfx_password"
+
+[order]
+symbol = "2330"
+price = 2000
+quantity = 1000
+action = "Buy"
+market_type = "Common"
+price_type = "Limit"
+time_in_force = "ROD"
+order_type = "Stock"
