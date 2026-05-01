@@ -22,7 +22,7 @@ target_include_directories(latency_core PUBLIC
 )
 
 target_link_libraries(latency_core PUBLIC
-    ${CMAKE_CURRENT_SOURCE_DIR}/lib/concords_api_stockclient.so
+    ${CMAKE_CURRENT_SOURCE_DIR}/lib/concords_sdk.so
     pthread
     tomlplusplus::tomlplusplus
 )

@@ -1,6 +1,6 @@
 #include "latency_measurement.h"
 
-using namespace concordsapi::stockclient;
+using namespace concords_sdk::stock;
 using namespace std::chrono;
 
 void LatencyMeasurement::loadConfig(const std::string& filename) {
@@ -23,7 +23,7 @@ LatencyMeasurement::LatencyMeasurement() {
   std::string pfx_password = getConfig<std::string>("user", "pfx_password");
 
   client_ = BuildStockClient(user_id.c_str(), password.c_str(), account.c_str(),
-                            pfx_filepath.c_str(), pfx_password.c_str());
+                             pfx_filepath.c_str(), pfx_password.c_str());
 
   client_->SetOrderSubmitCallback([this](const OrderSubmitResult& result) {
     auto end_time = high_resolution_clock::now();
@@ -33,18 +33,13 @@ LatencyMeasurement::LatencyMeasurement() {
       measured_latency_ms_ = duration.count() / 1000.0;
 
       std::cout << "Order submitted successfully!" << std::endl;
-      std::cout << "Order ID: " << result.order_id << std::endl;
-      std::cout << "Order Ticket ID: " << result.order_ticket_id << std::endl;
+
       std::cout << "Round-trip latency: " << measured_latency_ms_ << " ms"
                 << std::endl;
 
-      current_order_id_ = result.order_id;
-      current_order_ticket_id_ = result.order_ticket_id;
-
       std::this_thread::sleep_for(std::chrono::seconds(1));
       std::cout << "Cancelling order..." << std::endl;
-    client_->CancelOrder(current_order_id_, current_order_ticket_id_,
-                          current_order_info_);
+      client_->CancelOrder(current_order_id_);
     } else {
       std::cerr << "Order submission failed: " << result.error_message
                 << std::endl;
@@ -60,8 +55,7 @@ LatencyMeasurement::LatencyMeasurement() {
   client_->SetOrderCancelCallback([this](const OrderCancelResult& result) {
     if (result.success) {
       std::cout << "Order cancelled successfully!" << std::endl;
-      std::cout << "Order ID: " << result.order_id << std::endl;
-      std::cout << "Timestamp: " << result.timestamp << std::endl;
+      std::cout << "Order ID: " << result.target_id << std::endl;
     } else {
       std::cerr << "Order cancellation failed: " << result.error_message
                 << std::endl;
@@ -87,11 +81,6 @@ bool LatencyMeasurement::initialize() {
     return false;
   }
 
-  if (!client_->Login()) {
-    std::cerr << "Failed to login" << std::endl;
-    return false;
-  }
-
   std::cout << "Successfully connected and authenticated with broker"
             << std::endl;
   return true;
@@ -102,17 +91,19 @@ void LatencyMeasurement::submitOrder() {
   std::string price = std::to_string(getConfig<double>("order", "price"));
   std::string quantity = std::to_string(getConfig<int>("order", "quantity"));
 
-  OrderInfo order(parseMarket(getConfig<std::string>("order", "market")),
-                  parseOrderBoard(getConfig<std::string>("order", "order_board")),
-                  parseFundingType(getConfig<std::string>("order", "funding_type")),
-                  symbol,
-                  parseSide(getConfig<std::string>("order", "side")),
-                  parseOrderType(getConfig<std::string>("order", "order_type")),
-                  parseTimeInForce(getConfig<std::string>("order", "time_in_force")),
-                  quantity, price,
-                  parseDaytradeShortSell(getConfig<std::string>("order", "daytrade_shortsell")));
-
-  current_order_info_ = order;
+  order_counter_++;
+  current_order_id_ = std::format({"test-{}"}, order_counter_);
+  OrderInfo order(
+      parseMarket(getConfig<std::string>("order", "market")),
+      parseOrderBoard(getConfig<std::string>("order", "order_board")),
+      parseFundingType(getConfig<std::string>("order", "funding_type")), symbol,
+      parseSide(getConfig<std::string>("order", "side")),
+      parseOrderType(getConfig<std::string>("order", "order_type")),
+      parseTimeInForce(getConfig<std::string>("order", "time_in_force")),
+      quantity, price,
+      parseDaytradeShortSell(
+          getConfig<std::string>("order", "daytrade_shortsell")),
+      current_order_id_);
 
   {
     std::lock_guard<std::mutex> lock(latency_mutex_);
@@ -124,19 +115,19 @@ void LatencyMeasurement::submitOrder() {
   client_->SubmitOrder(order);
 
   std::unique_lock<std::mutex> lock(latency_mutex_);
-  bool submission_success = cv_.wait_for(lock, std::chrono::seconds(10), [this] {
-    return order_submitted_.load();
-  });
+  bool submission_success =
+      cv_.wait_for(lock, std::chrono::seconds(10),
+                   [this] { return order_submitted_.load(); });
 
   if (!submission_success) {
     std::cerr << "Order submission timeout!" << std::endl;
     return;
   }
 
-  if (order_submitted_ && !current_order_id_.empty()) {
+  if (order_submitted_) {
     std::cout << "Waiting for cancellation to complete..." << std::endl;
     cancel_cv_.wait_for(lock, std::chrono::seconds(10),
-                       [this] { return order_cancelled_.load(); });
+                        [this] { return order_cancelled_.load(); });
 
     if (!order_cancelled_) {
       std::cerr << "Order cancellation timeout!" << std::endl;
@@ -152,19 +143,21 @@ void LatencyMeasurement::runLatencyTest() {
   int quantity = getConfig<int>("order", "quantity");
   std::string side_str = getConfig<std::string>("order", "side");
   int interval = getConfig<int>("trading_hours", "interval_seconds");
-  std::string start_time_str = getConfig<std::string>("trading_hours", "start_time");
-  std::string end_time_str = getConfig<std::string>("trading_hours", "end_time");
+  std::string start_time_str =
+      getConfig<std::string>("trading_hours", "start_time");
+  std::string end_time_str =
+      getConfig<std::string>("trading_hours", "end_time");
 
-  int start_time = std::stoi(start_time_str.substr(0, 2) +
-                             start_time_str.substr(3, 2));
-  int end_time = std::stoi(end_time_str.substr(0, 2) +
-                           end_time_str.substr(3, 2));
+  int start_time =
+      std::stoi(start_time_str.substr(0, 2) + start_time_str.substr(3, 2));
+  int end_time =
+      std::stoi(end_time_str.substr(0, 2) + end_time_str.substr(3, 2));
 
   std::cout << "Trading: " << symbol << " " << side_str << " " << price << " x"
             << quantity << " every " << interval << "s during "
             << start_time_str << "-" << end_time_str << std::endl;
 
-  int order_count = 0;
+  // int order_count = 0;
   while (true) {
     auto now = system_clock::now();
     auto utc8_now = now + std::chrono::hours(8);
@@ -183,8 +176,7 @@ void LatencyMeasurement::runLatencyTest() {
       continue;
     }
 
-    order_count++;
-    std::cout << "\n--- Order #" << order_count << " ---" << std::endl;
+    std::cout << "\n--- Order #" << order_counter_ << " ---" << std::endl;
     submitOrder();
     std::this_thread::sleep_for(std::chrono::seconds(interval));
   }

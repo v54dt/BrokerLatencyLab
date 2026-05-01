@@ -3,10 +3,10 @@
 #include <iostream>
 #include <string>
 
-#include "stock-client/order.h"
+#include "stock/include/order.h"
 
-namespace concordsapi {
-namespace stockclient {
+namespace concords_sdk {
+namespace stock {
 
 inline Market parseMarket(const std::string& str) {
   if (str == "TSE") return Market::TSE;
@@ -25,7 +25,7 @@ inline OrderBoard parseOrderBoard(const std::string& str) {
 }
 
 inline FundingType parseFundingType(const std::string& str) {
-  if (str == "Cash") return FundingType::Cash;
+  if (str == "Cash") return FundingType::Ordinary;
   if (str == "MarginBuy") return FundingType::MarginBuy;
   if (str == "MarginShortSell") return FundingType::MarginShortSell;
   std::cerr << "Invalid funding_type: " << str << std::endl;
@@ -61,5 +61,5 @@ inline DaytradeShortSell parseDaytradeShortSell(const std::string& str) {
   exit(1);
 }
 
-}  // namespace stockclient
-}  // namespace concordsapi
+}  // namespace stock
+}  // namespace concords_sdk

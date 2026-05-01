@@ -12,12 +12,12 @@
 #include <thread>
 
 #include "order_parsers.h"
-#include "stock-client/order.h"
-#include "stock-client/stock_client.h"
+#include "stock/include/order.h"
+#include "stock/include/stock.h"
 
 class LatencyMeasurement {
  private:
-  std::unique_ptr<concordsapi::stockclient::StockClient> client_;
+  std::unique_ptr<concords_sdk::stock::StockClient> client_;
   std::atomic<bool> order_submitted_{false};
   std::atomic<bool> order_cancelled_{false};
   std::mutex latency_mutex_;
@@ -27,9 +27,8 @@ class LatencyMeasurement {
   double measured_latency_ms_ = 0.0;
 
   // Order tracking for cancellation
+  int order_counter_ = 0;
   std::string current_order_id_;
-  std::string current_order_ticket_id_;
-  concordsapi::stockclient::OrderInfo current_order_info_;
 
   // Configuration
   toml::table config_table_;
