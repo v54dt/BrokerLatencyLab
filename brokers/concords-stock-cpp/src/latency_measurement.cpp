@@ -96,7 +96,10 @@ void LatencyMeasurement::submitOrder() {
   std::string quantity = std::to_string(getConfig<int>("order", "quantity"));
 
   order_counter_++;
-  current_order_id_ = std::format({"test-{}"}, order_counter_);
+  auto now = std::chrono::floor<seconds>(system_clock::now());
+  std::chrono::zoned_time local{std::chrono::current_zone(), now};
+  current_order_id_ =
+      std::format("test-{:%Y%m%d%H%M%S}-{}", local, order_counter_);
   OrderInfo order(
       parseMarket(getConfig<std::string>("order", "market")),
       parseOrderBoard(getConfig<std::string>("order", "order_board")),
