@@ -29,6 +29,10 @@ LatencyMeasurement::LatencyMeasurement() {
     auto end_time = high_resolution_clock::now();
 
     if (result.success) {
+      if (result.user_defined_id != current_order_id_) {
+        std::cout << "Bypassing order: " << result.user_defined_id << std::endl;
+        return;
+      }
       auto duration = duration_cast<microseconds>(end_time - order_start_time_);
       measured_latency_ms_ = duration.count() / 1000.0;
 
