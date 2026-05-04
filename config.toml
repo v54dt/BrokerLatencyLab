@@ -2,15 +2,15 @@
 timezone = "Asia/Taipei"
 
 [brokers.concords-stock-cpp]
-enabled = true
+enabled = false
 replicas = 1
 cpu_limit = "1.0"
-memory_limit = "512M"
-cpu_reservation = "0.5"
-memory_reservation = "256M"
+memory_limit = "1G"
+cpu_reservation = "1"
+memory_reservation = "1G"
 
 [brokers.concords-stock-python]
-enabled = true
+enabled = false
 replicas = 1
 cpu_limit = "1.0"
 memory_limit = "512M"
@@ -26,5 +26,7 @@ memory_limit = "256M"
 [brokers.sinotrade-stock-python]
 enabled = false
 replicas = 1
-cpu_limit = "0.5"
-memory_limit = "256M"
+cpu_limit = "1.0"
+memory_limit = "1G"
+cpu_reservation = "1.0"
+memory_reservation = "1G"
