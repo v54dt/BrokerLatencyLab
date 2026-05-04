@@ -53,6 +53,12 @@ def generate_docker_compose(config):
                 ]
             }
 
+            env_file_path = os.path.join(
+                os.path.dirname(os.path.dirname(__file__)),
+                'brokers', broker_name, '.env')
+            if os.path.exists(env_file_path):
+                service_def['env_file'] = [f'./brokers/{broker_name}/.env']
+
             # Add resource limits
             service_def['deploy'] = {
                 'resources': {
