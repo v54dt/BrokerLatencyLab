@@ -4,8 +4,8 @@ end_time = "13:30"
 interval_seconds = 300
 
 [order]
-symbol = "2897"
-price = 8.62
+symbol = "2330"
+price = 2000
 quantity = 1
 action = "Buy"       # Buy or Sell
 price_type = "LMT"   # LMT (限價), MKT (市價)

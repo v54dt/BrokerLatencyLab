@@ -1,3 +1,4 @@
+import os
 import shioaji as sj
 import time
 import requests
@@ -6,11 +7,9 @@ from datetime import datetime, timezone, timedelta
 import threading
 import logging
 import traceback
+from dotenv import load_dotenv
 
-
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-)
+logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger(__name__)
 
 # Timeout constants
@@ -19,12 +18,20 @@ CANCEL_TIMEOUT = 10
 
 TAIWAN_TZ = timezone(timedelta(hours=8))
 
+REQUIRED_ENV_VARS = ["API_KEY", "SECRET_KEY", "CA_CERT_PATH", "CA_PASSWORD"]
+
 
 class LatencyMeasurement:
     """Measures order submission latency for Sinotrade stock trading."""
 
     def __init__(self, config_path="config.toml"):
         """Initialize the latency measurement system."""
+        load_dotenv()
+        missing = [k for k in REQUIRED_ENV_VARS if k not in os.environ]
+        if missing:
+            raise RuntimeError(
+                f"Missing env vars (load .env or check docker env_file): {missing}"
+            )
         self.config = toml.load(config_path)
         self.validate_config()
         self.api = sj.Shioaji()
@@ -73,7 +80,6 @@ class LatencyMeasurement:
     def validate_config(self):
         """Validate configuration on startup."""
         required_fields = {
-            "user": ["api_key", "secret_key", "ca_cert_path", "ca_password"],
             "order": [
                 "symbol",
                 "price",
@@ -102,8 +108,6 @@ class LatencyMeasurement:
         if self.config["trading_hours"]["interval_seconds"] <= 0:
             raise ValueError("Interval must be positive")
 
-        logger.info("Configuration validated successfully")
-
     def _order_callback(self, stat, msg):
         """Handle order state updates from exchange.
 
@@ -118,12 +122,7 @@ class LatencyMeasurement:
             operation = msg.get("operation", {})
             order = msg.get("order", {})
             op_type = operation.get("op_type", "Unknown")
-            op_code = operation.get("op_code", "")
             order_id = order.get("id", "N/A")
-
-            logger.info(
-                f"Order callback: op_type={op_type}, op_code={op_code}, order_id={order_id}"
-            )
 
             if not self.current_trade or order_id != self.current_trade.order.id:
                 return
@@ -147,22 +146,20 @@ class LatencyMeasurement:
         """
         end_time = time.perf_counter()
         self.measured_latency_ms = (end_time - self.order_start_time) * 1000
-        logger.info(f"Round-trip latency: {self.measured_latency_ms:.2f} ms")
 
         op_code = operation.get("op_code", "")
         op_msg = operation.get("op_msg", "")
 
         # "00" = success, others = fail
         if op_code != "00":
-            logger.error(f"Order failed: {op_msg} (op_code: {op_code})")
+            logger.error(f"Order submission failed: {op_msg}")
             self.order_event.set()
             return
 
-        if self.current_action_str == "buy":
-            side = "B"
-        else:
-            side = "S"
+        logger.info("Order submitted successfully!")
+        logger.info(f"Round-trip latency: {self.measured_latency_ms:.2f} ms")
 
+        side = "B" if self.current_action_str == "buy" else "S"
         self.send_latency_report(
             symbol=self.current_symbol,
             side=side,
@@ -173,6 +170,7 @@ class LatencyMeasurement:
 
         self.order_event.set()
 
+        logger.info("Cancelling order...")
         self._cancel_order()
 
     def _handle_order_cancelled(self, operation, order):
@@ -181,15 +179,13 @@ class LatencyMeasurement:
         op_msg = operation.get("op_msg", "")
         order_id = order.get("id", "N/A")
 
-        logger.info(f"Order cancel callback: {order_id}")
-
         if op_code == "00":
-            logger.info(f"  Order cancelled successfully")
-            self.cancel_event.set()
+            logger.info("Order cancelled successfully!")
+            logger.info(f"Order ID: {order_id}")
         else:
-            logger.warning(f"  Cancel failed: {op_msg}")
+            logger.error(f"Order cancellation failed: {op_msg}")
 
-            self.cancel_event.set()
+        self.cancel_event.set()
 
     def _cancel_order(self):
         try:
@@ -197,42 +193,33 @@ class LatencyMeasurement:
                 return
 
             result = self.api.cancel_order(self.current_trade)
-
-            if result:
-                logger.info(
-                    f"Cancel request sent for order {self.current_trade.order.id}"
-                )
-            else:
-                logger.warning(
-                    f"Cancel order returned None for {self.current_trade.order.id}"
+            if not result:
+                logger.error(
+                    f"Order cancellation failed: cancel_order returned None"
                 )
                 self.cancel_event.set()
 
         except Exception as e:
-            logger.error(f"Error cancelling order: {e}")
+            logger.error(f"Order cancellation failed: {e}")
             traceback.print_exc()
             self.cancel_event.set()
 
     def login(self):
         """Login to Shioaji API."""
         try:
-            logger.info("Logging in to Sinotrade...")
             self.api.login(
-                api_key=self.config["user"]["api_key"],
-                secret_key=self.config["user"]["secret_key"],
+                api_key=os.environ["API_KEY"],
+                secret_key=os.environ["SECRET_KEY"],
                 contracts_cb=lambda security_type: None,
             )
 
-            ca_cert_path = self.config["user"]["ca_cert_path"]
-            ca_password = self.config["user"]["ca_password"]
             self.api.activate_ca(
-                ca_path=ca_cert_path,
-                ca_passwd=ca_password,
+                ca_path=os.environ["CA_CERT_PATH"],
+                ca_passwd=os.environ["CA_PASSWORD"],
             )
-            logger.info("Login and CA activation successful")
 
             if not self.api.stock_account:
-                logger.error("No stock account found")
+                logger.error("Failed to connect to broker: no stock account")
                 return False
 
             account_index = self.config["order"].get("account_index", 0)
@@ -241,11 +228,11 @@ class LatencyMeasurement:
             else:
                 self.account = self.api.stock_account
 
-            logger.info(f"Using account: {self.account}")
+            logger.info("Successfully connected and authenticated with broker")
             return True
 
         except Exception as e:
-            logger.error(f"Login failed: {e}")
+            logger.error(f"Failed to connect to broker: {e}")
             traceback.print_exc()
             return False
 
@@ -253,7 +240,6 @@ class LatencyMeasurement:
         """Logout from Shioaji API."""
         try:
             self.api.logout()
-            logger.info("Logged out successfully")
         except Exception as e:
             logger.error(f"Logout error: {e}")
 
@@ -330,7 +316,6 @@ class LatencyMeasurement:
             )
 
             self.order_start_time = time.perf_counter()
-            logger.info(f"Submitting order: {symbol} {action} {price} x{quantity}")
 
             self.order_event.clear()
             self.cancel_event.clear()
@@ -350,8 +335,6 @@ class LatencyMeasurement:
 
             # Wait for callback, but if timeout, check status manually
             if not self.order_event.wait(timeout=ORDER_TIMEOUT):
-                logger.warning("No callback received, checking status manually...")
-
                 # Update status and check if order is PreSubmitted/Submitted
                 self.api.update_status(self.account)
                 trades = self.api.list_trades()
@@ -363,27 +346,25 @@ class LatencyMeasurement:
                         break
 
                 if not current_order:
-                    logger.error("Order not found in trades list")
+                    logger.error("Order submission timeout!")
                     return False
 
-                logger.info(f"Manual status check: {current_order.status.status}")
-
-                # If order is PreSubmitted or Submitted, trigger callback manually
+                # If order is PreSubmitted or Submitted, treat as submitted
                 if str(current_order.status.status) in [
                     "Status.PreSubmitted",
                     "Status.Submitted",
                 ]:
-                    logger.info("Order confirmed via manual status check")
                     self.current_trade = current_order
 
                     # Calculate latency (approximate, since callback was delayed)
                     end_time = time.perf_counter()
                     self.measured_latency_ms = (end_time - self.order_start_time) * 1000
+
+                    logger.info("Order submitted successfully!")
                     logger.info(
-                        f"  Round-trip latency (approx): {self.measured_latency_ms:.2f} ms"
+                        f"Round-trip latency: {self.measured_latency_ms:.2f} ms"
                     )
 
-                    # Send report and cancel
                     side = "B" if self.current_action_str == "buy" else "S"
                     self.send_latency_report(
                         symbol=self.current_symbol,
@@ -393,23 +374,25 @@ class LatencyMeasurement:
                         latency_ms=self.measured_latency_ms,
                     )
 
+                    logger.info("Cancelling order...")
                     self._cancel_order()
                 else:
                     logger.error(
-                        f"Order in unexpected status: {current_order.status.status}"
+                        f"Order submission failed: unexpected status {current_order.status.status}"
                     )
                     return False
 
-            logger.info(f"Waiting for cancel confirmation...")
+            logger.info("Waiting for cancellation to complete...")
 
             if not self.cancel_event.wait(timeout=CANCEL_TIMEOUT):
-                logger.error("Order cancellation timeout")
+                logger.error("Order cancellation timeout!")
                 return False
 
+            logger.info("Order lifecycle completed (submit -> cancel)")
             return True
 
         except Exception as e:
-            logger.error(f"Error submitting order: {e}")
+            logger.error(f"Order submission failed: {e}")
             traceback.print_exc()
             return False
 
@@ -431,9 +414,7 @@ class LatencyMeasurement:
 
             response = requests.post(api_url, json=data, timeout=5)
 
-            if response.status_code == 200:
-                logger.info(f"Latency report sent: {latency_ms:.2f}ms for {symbol}")
-            else:
+            if response.status_code != 200:
                 logger.warning(
                     f"Failed to send latency report: HTTP {response.status_code}"
                 )
@@ -468,13 +449,11 @@ class LatencyMeasurement:
         start_time = int(start_time_str.replace(":", ""))
         end_time = int(end_time_str.replace(":", ""))
 
-        logger.info(f"Starting latency test")
-        logger.info(f"  Symbol: {symbol}")
-        logger.info(f"  Action: {action}")
-        logger.info(f"  Price: {price}")
-        logger.info(f"  Quantity: {quantity}")
-        logger.info(f"  Interval: {interval}s")
-        logger.info(f"  Trading hours: {start_time_str} - {end_time_str}")
+        side = "B" if action.lower() == "buy" else "S"
+        logger.info(
+            f"Trading: {symbol} {side} {price} x{quantity} every {interval}s "
+            f"during {start_time_str}-{end_time_str}"
+        )
 
         order_count = 0
 
@@ -485,30 +464,16 @@ class LatencyMeasurement:
                 is_trading_time = start_time <= current_time <= end_time
 
                 if not is_weekday or not is_trading_time:
-                    if order_count == 0:
-                        logger.info(
-                            f"Waiting for trading hours... (current: {current_time:04d}, weekday: {is_weekday})"
-                        )
                     time.sleep(60)
                     continue
 
                 order_count += 1
-                logger.info(f"\n{'='*50}")
-                logger.info(f"Order #{order_count} at {current_time:04d}")
-                logger.info(f"{'='*50}")
+                logger.info(f"\n--- Order #{order_count} ---")
 
-                success = self.submit_order(symbol, action, price, quantity)
-
-                if not success:
-                    logger.warning(
-                        f"Order #{order_count} failed, will retry in {interval}s"
-                    )
-
-                logger.info(f"Waiting {interval}s before next order...")
+                self.submit_order(symbol, action, price, quantity)
                 time.sleep(interval)
 
             except KeyboardInterrupt:
-                logger.info("\nStopping latency test...")
                 break
             except Exception as e:
                 logger.error(f"Error in test loop: {e}")
@@ -522,7 +487,6 @@ def main():
 
     try:
         if not latency_test.login():
-            logger.error("Failed to login")
             return 1
 
         # Wait for connection to stabilize
@@ -531,7 +495,7 @@ def main():
         latency_test.run_latency_test()
 
     except KeyboardInterrupt:
-        logger.info("\nShutting down...")
+        pass
     except Exception as e:
         logger.error(f"Fatal error: {e}")
         traceback.print_exc()
