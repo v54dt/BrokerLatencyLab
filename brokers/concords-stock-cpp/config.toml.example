@@ -24,4 +24,4 @@ daytrade_shortsell = "False"
 
 [api]
 url = ""
-broker_name = ""
+broker_name = "concords-stock-cpp"
