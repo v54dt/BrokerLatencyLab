@@ -414,7 +414,7 @@ class LatencyMeasurement:
 
             response = requests.post(api_url, json=data, timeout=5)
 
-            if response.status_code != 200:
+            if not (200 <= response.status_code < 300):
                 logger.warning(
                     f"Failed to send latency report: HTTP {response.status_code}"
                 )
