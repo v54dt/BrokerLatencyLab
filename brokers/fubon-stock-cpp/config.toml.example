@@ -1,0 +1,24 @@
+[user]
+user_id = "user_id"
+password = "password"
+pfx_filepath = "certs/cert.pfx"
+pfx_password = "pfx_password"
+
+[trading_hours]
+start_time = "08:30"
+end_time = "13:30"
+interval_seconds = 30
+
+[order]
+symbol = "2330"
+price = 2000
+quantity = 1000
+side = "BUY"                    # BUY / SELL
+market_type = "INTRADAY_ODD"    # COMMON / FIXING / ODD / INTRADAY_ODD / EMG / EMG_ODD
+price_type = "LIMIT"            # LIMIT / MARKET / LIMIT_UP / LIMIT_DOWN / REFERENCE
+time_in_force = "ROD"           # ROD / IOC / FOK
+order_type = "STOCK"            # STOCK / MARGIN / SHORT / SBL / DAY_TRADE
+
+[api]
+url = ""
+broker_name = "fubon-stock-cpp"

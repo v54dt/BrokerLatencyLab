@@ -1,0 +1,9 @@
+# Git
+.git/
+.gitignore
+
+# Build
+build/
+
+# Credentials
+*.log
