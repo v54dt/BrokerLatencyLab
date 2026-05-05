@@ -12,6 +12,8 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(tomlplusplus)
 
+find_package(CURL REQUIRED)
+
 add_library(latency_core STATIC
     src/latency_measurement.cpp
 )
@@ -25,6 +27,7 @@ target_link_libraries(latency_core PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/lib/concords_sdk.so
     pthread
     tomlplusplus::tomlplusplus
+    CURL::libcurl
 )
 
 add_executable(main

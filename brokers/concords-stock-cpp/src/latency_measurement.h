@@ -36,6 +36,7 @@ class LatencyMeasurement {
 
   // Helper methods
   void loadConfig(const std::string& filename = "config.toml");
+  void sendLatencyReport();
 
   template <typename T>
   T getConfig(const char* section, const char* key) {

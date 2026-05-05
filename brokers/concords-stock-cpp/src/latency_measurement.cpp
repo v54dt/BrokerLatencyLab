@@ -1,5 +1,7 @@
 #include "latency_measurement.h"
 
+#include <curl/curl.h>
+
 using namespace concords_sdk::stock;
 using namespace std::chrono;
 
@@ -140,7 +142,64 @@ void LatencyMeasurement::submitOrder() {
       std::cerr << "Order cancellation timeout!" << std::endl;
     } else {
       std::cout << "Order lifecycle completed (submit -> cancel)" << std::endl;
+      sendLatencyReport();
     }
+  }
+}
+
+void LatencyMeasurement::sendLatencyReport() {
+  std::string api_url = getConfig<std::string>("api", "url");
+  std::string broker = getConfig<std::string>("api", "broker_name");
+  std::string symbol = getConfig<std::string>("order", "symbol");
+  std::string side_raw = getConfig<std::string>("order", "side");
+  std::string side =
+      (!side_raw.empty() && (side_raw[0] == 'B' || side_raw[0] == 'b')) ? "B"
+                                                                        : "S";
+  double price = getConfig<double>("order", "price");
+  int volume = getConfig<int>("order", "quantity");
+
+  auto now_s = std::chrono::floor<seconds>(system_clock::now());
+  std::string timestamp = std::format("{:%Y-%m-%dT%H:%M:%SZ}", now_s);
+
+  std::string body = std::format(
+      R"({{"timestamp":"{}","broker":"{}","latency_ms":{:.3f},)"
+      R"("symbol":"{}","side":"{}","price":{},"volume":{}}})",
+      timestamp, broker, measured_latency_ms_, symbol, side, price, volume);
+
+  CURL* curl = curl_easy_init();
+  if (!curl) {
+    std::cerr << "Failed to send latency report: curl_easy_init failed"
+              << std::endl;
+    return;
+  }
+
+  struct curl_slist* headers =
+      curl_slist_append(nullptr, "Content-Type: application/json");
+
+  curl_easy_setopt(curl, CURLOPT_URL, api_url.c_str());
+  curl_easy_setopt(curl, CURLOPT_POST, 1L);
+  curl_easy_setopt(curl, CURLOPT_POSTFIELDS, body.c_str());
+  curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, (long)body.size());
+  curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+  curl_easy_setopt(curl, CURLOPT_TIMEOUT, 5L);
+  curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
+  // Discard response body.
+  curl_easy_setopt(
+      curl, CURLOPT_WRITEFUNCTION,
+      +[](char*, size_t s, size_t n, void*) -> size_t { return s * n; });
+
+  CURLcode res = curl_easy_perform(curl);
+  long status_code = 0;
+  if (res == CURLE_OK) {
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status_code);
+  }
+
+  curl_slist_free_all(headers);
+  curl_easy_cleanup(curl);
+
+  if (res != CURLE_OK || status_code < 200 || status_code >= 300) {
+    std::cerr << "Failed to send latency report: " << curl_easy_strerror(res)
+              << " (HTTP " << status_code << ")" << std::endl;
   }
 }
 
