@@ -13,15 +13,17 @@ memory_reservation = "1G"
 enabled = false
 replicas = 1
 cpu_limit = "1.0"
-memory_limit = "512M"
-cpu_reservation = "0.5"
-memory_reservation = "256M"
+memory_limit = "1G"
+cpu_reservation = "1"
+memory_reservation = "1G"
 
 [brokers.concords-futures-python]
 enabled = false
 replicas = 1
 cpu_limit = "0.5"
-memory_limit = "256M"
+memory_limit = "1G"
+cpu_reservation = "1"
+memory_reservation = "1G"
 
 [brokers.sinotrade-stock-python]
 enabled = false
@@ -29,4 +31,12 @@ replicas = 1
 cpu_limit = "1.0"
 memory_limit = "1G"
 cpu_reservation = "1.0"
+memory_reservation = "1G"
+
+[brokers.fubon-stock-cpp]
+enabled = false
+replicas = 1
+cpu_limit = "1.0"
+memory_limit = "1G"
+cpu_reservation = "1"
 memory_reservation = "1G"
