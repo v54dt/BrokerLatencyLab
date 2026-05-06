@@ -1,0 +1,20 @@
+# Git
+
+.git/
+.gitignore
+
+# Python
+
+**pycache**/
+\*.pyc
+.venv/
+
+# Profiling / tools
+
+profiling/
+tools/
+
+# Logs
+
+log/
+\*.log

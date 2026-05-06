@@ -1,9 +1,14 @@
-# Virtual environment
+# Python
+__pycache__/
+*.pyc
+venv/
 .venv/
 
-# Credentials
-*.pfx
+# Sensitive
 .env
+*.pfx
+config.toml
 
-# Cache
-__pycache__/
+# Logs
+log/
+*.log

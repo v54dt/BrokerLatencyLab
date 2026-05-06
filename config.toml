@@ -40,3 +40,11 @@ cpu_limit = "1.0"
 memory_limit = "1G"
 cpu_reservation = "1"
 memory_reservation = "1G"
+
+[brokers.fubon-stock-python]
+enabled = false
+replicas = 1
+cpu_limit = "1.0"
+memory_limit = "1G"
+cpu_reservation = "1"
+memory_reservation = "1G"

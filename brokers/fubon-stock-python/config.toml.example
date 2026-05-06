@@ -1,0 +1,24 @@
+[user]
+user_id = "user_id"
+password = "password"
+pfx_filepath = "certs/cert.pfx"
+pfx_password = "pfx_password"
+
+[trading_hours]
+start_time = "08:30"
+end_time = "13:30"
+interval_seconds = 30
+
+[order]
+symbol = "2330"
+price = 2000
+quantity = 1000
+action = "Buy"                  # Buy / Sell
+market_type = "Common"          # Common / Fixing / Odd / IntradayOdd / Emg / EmgOdd
+price_type = "Limit"            # Limit / Market / LimitUp / LimitDown / Reference
+time_in_force = "ROD"           # ROD / IOC / FOK
+order_type = "Stock"            # Stock / Margin / Short / SBL / DayTrade
+
+[api]
+url = ""
+broker_name = "fubon-stock-python"
