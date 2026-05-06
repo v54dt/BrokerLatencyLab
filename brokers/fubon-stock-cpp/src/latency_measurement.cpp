@@ -62,7 +62,7 @@ void LatencyMeasurement::submitOrder() {
       std::format("test-{:%Y%m%d%H%M%S}-{}", local, order_counter_);
 
   fubon::Order order{
-      parseSide(getConfig<std::string>("order", "side")),
+      parseAction(getConfig<std::string>("order", "action")),
       getConfig<std::string>("order", "symbol"),
       std::format("{:g}", getConfig<double>("order", "price")),
       getConfig<int64_t>("order", "quantity"),
@@ -112,10 +112,9 @@ void LatencyMeasurement::sendLatencyReport() {
   std::string api_url = getConfig<std::string>("api", "url");
   std::string broker = getConfig<std::string>("api", "broker_name");
   std::string symbol = getConfig<std::string>("order", "symbol");
-  std::string side_raw = getConfig<std::string>("order", "side");
+  std::string action = getConfig<std::string>("order", "action");
   std::string side =
-      (!side_raw.empty() && (side_raw[0] == 'B' || side_raw[0] == 'b')) ? "B"
-                                                                       : "S";
+      (!action.empty() && (action[0] == 'B' || action[0] == 'b')) ? "B" : "S";
   double price = getConfig<double>("order", "price");
   int64_t volume = getConfig<int64_t>("order", "quantity");
 
@@ -167,7 +166,9 @@ void LatencyMeasurement::runLatencyTest() {
   std::string symbol = getConfig<std::string>("order", "symbol");
   double price = getConfig<double>("order", "price");
   int64_t quantity = getConfig<int64_t>("order", "quantity");
-  std::string side_str = getConfig<std::string>("order", "side");
+  std::string action = getConfig<std::string>("order", "action");
+  std::string side =
+      (!action.empty() && (action[0] == 'B' || action[0] == 'b')) ? "B" : "S";
   int interval = getConfig<int>("trading_hours", "interval_seconds");
   std::string start_time_str =
       getConfig<std::string>("trading_hours", "start_time");
@@ -179,7 +180,7 @@ void LatencyMeasurement::runLatencyTest() {
   int end_time =
       std::stoi(end_time_str.substr(0, 2) + end_time_str.substr(3, 2));
 
-  std::cout << "Trading: " << symbol << " " << side_str << " " << price << " x"
+  std::cout << "Trading: " << symbol << " " << side << " " << price << " x"
             << quantity << " every " << interval << "s during "
             << start_time_str << "-" << end_time_str << std::endl;
 

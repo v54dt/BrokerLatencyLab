@@ -7,10 +7,10 @@
 
 namespace fubon_parsers {
 
-inline fubon::BsAction parseSide(const std::string& s) {
-  if (s == "BUY" || s == "Buy" || s == "B") return fubon::BsAction::BUY;
-  if (s == "SELL" || s == "Sell" || s == "S") return fubon::BsAction::SELL;
-  std::cerr << "Invalid side: " << s << std::endl;
+inline fubon::BsAction parseAction(const std::string& s) {
+  if (s == "BUY") return fubon::BsAction::BUY;
+  if (s == "SELL") return fubon::BsAction::SELL;
+  std::cerr << "Invalid action: " << s << std::endl;
   exit(1);
 }
 
