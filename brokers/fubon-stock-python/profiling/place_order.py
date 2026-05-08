@@ -14,6 +14,7 @@ import tomllib
 from pathlib import Path
 
 import fubon_neo
+import fubon_neo.constant
 from fubon_neo.sdk import FubonSDK, Order
 
 SCRIPT_DIR = Path(__file__).parent
