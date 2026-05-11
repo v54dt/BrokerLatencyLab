@@ -3,6 +3,7 @@ project(PlaceOrderProfiler)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 include(FetchContent)
 FetchContent_Declare(
@@ -20,7 +21,7 @@ target_include_directories(submit_order PRIVATE
 )
 
 target_link_libraries(submit_order PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/../lib/concords_api_stockclient.so
+    ${CMAKE_CURRENT_SOURCE_DIR}/../lib/concords_sdk.so
     pthread
     tomlplusplus::tomlplusplus
 )

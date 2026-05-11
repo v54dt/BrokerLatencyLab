@@ -19,9 +19,9 @@
 #include <thread>
 
 #include "order_parsers.h"
-#include "stock-client/stock_client.h"
+#include "stock/include/stock.h"
 
-using namespace concordsapi::stockclient;
+using namespace concords_sdk::stock;
 
 template <typename T>
 T get_config(const toml::table& config, const char* section, const char* key) {
@@ -88,14 +88,17 @@ int main(int argc, char* argv[]) {
   DaytradeShortSell daytrade_shortsell = parseDaytradeShortSell(
       get_config<std::string>(config, "order", "daytrade_shortsell"));
 
+  auto now = std::chrono::floor<std::chrono::seconds>(
+      std::chrono::system_clock::now());
+  std::chrono::zoned_time local{std::chrono::current_zone(), now};
+  std::string user_defined_id = std::format("profile-{:%Y%m%d%H%M%S}", local);
+
   OrderInfo order_info(market, order_board, funding_type, symbol, side,
                        order_type, time_in_force, quantity, price,
-                       daytrade_shortsell);
+                       daytrade_shortsell, user_defined_id);
 
   std::atomic<bool> order_submitted{false};
   std::atomic<bool> order_cancelled{false};
-  std::string current_order_id;
-  std::string current_order_ticket_id;
   std::mutex mtx;
   std::condition_variable cv, cancel_cv;
   uint64_t submit_end_ns = 0;
@@ -114,15 +117,11 @@ int main(int argc, char* argv[]) {
 
     if (result.success) {
       std::cerr << "Order submitted successfully!" << std::endl;
-      std::cerr << "Order ID: " << result.order_id << std::endl;
-      std::cerr << "Order Ticket ID: " << result.order_ticket_id << std::endl;
-
-      current_order_id = result.order_id;
-      current_order_ticket_id = result.order_ticket_id;
+      std::cerr << "User defined ID: " << result.user_defined_id << std::endl;
+      std::cerr << "Transaction ID: " << result.transaction_id << std::endl;
 
       std::this_thread::sleep_for(std::chrono::seconds(1));
-      client->CancelOrder(current_order_id, current_order_ticket_id,
-                          order_info);
+      client->CancelOrder(result.user_defined_id);
     } else {
       std::cerr << "Order submission failed: " << result.error_message
                 << std::endl;
@@ -152,11 +151,6 @@ int main(int argc, char* argv[]) {
 
   if (!client->Connect()) {
     std::cerr << "Failed to connect" << std::endl;
-    return 1;
-  }
-  std::this_thread::sleep_for(std::chrono::seconds(1));
-  if (!client->Login()) {
-    std::cerr << "Failed to login" << std::endl;
     return 1;
   }
   std::this_thread::sleep_for(std::chrono::seconds(1));
