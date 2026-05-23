@@ -16,6 +16,7 @@ find_package(CURL REQUIRED)
 
 add_library(latency_core STATIC
     src/latency_measurement.cpp
+    src/network.cpp
 )
 
 target_include_directories(latency_core PUBLIC

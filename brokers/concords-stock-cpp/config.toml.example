@@ -25,3 +25,7 @@ daytrade_shortsell = "False"
 [api]
 url = ""
 broker_name = "concords-stock-cpp"
+
+[network_probe]
+host = ""
+port = 0
