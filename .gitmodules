@@ -1,0 +1,3 @@
+[submodule "dashboard"]
+	path = dashboard
+	url = https://github.com/v54dt/LatencyDashboard.git

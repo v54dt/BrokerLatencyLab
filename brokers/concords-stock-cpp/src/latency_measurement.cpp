@@ -83,6 +83,10 @@ std::string fmtOpt(const std::optional<uint32_t>& v) {
   return v.has_value() ? std::format("{}", *v) : std::string("null");
 }
 
+std::string fmtOpt(const std::optional<long>& v) {
+  return v.has_value() ? std::format("{}", *v) : std::string("null");
+}
+
 std::string fmtOpt(const std::optional<bool>& v) {
   if (!v.has_value()) return "null";
   return *v ? "true" : "false";
@@ -292,6 +296,9 @@ LatencyMeasurement::LatencyMeasurement() {
           return;
         }
 
+        getrusage(RUSAGE_SELF, &rusage_after_);
+        rusage_valid_ = true;
+
         sdk_local_ms_ = chrono::duration_cast<chrono::microseconds>(
                             submit_call_end_time_ - order_start_time_)
                             .count() /
@@ -383,6 +390,9 @@ void LatencyMeasurement::resetIterationState() {
   outcome_.clear();
   error_message_.clear();
   tcp_info_ = {};
+  rusage_before_ = {};
+  rusage_after_ = {};
+  rusage_valid_ = false;
   order_submitted_ = false;
   order_cancelled_ = false;
 }
@@ -400,6 +410,7 @@ void LatencyMeasurement::submitOrder() {
       current_order_id_);
 
   // Submit
+  getrusage(RUSAGE_SELF, &rusage_before_);
   order_start_time_ = chrono::high_resolution_clock::now();
   client_->SubmitOrder(order);
   submit_call_end_time_ = chrono::high_resolution_clock::now();
@@ -461,14 +472,29 @@ void LatencyMeasurement::runNetworkProbe() {
 }
 
 void LatencyMeasurement::sendOrderReport() {
+  std::optional<long> minor_faults, major_faults;
+  std::optional<long> voluntary_ctxt_switches, involuntary_ctxt_switches;
+  if (rusage_valid_) {
+    minor_faults = rusage_after_.ru_minflt - rusage_before_.ru_minflt;
+    major_faults = rusage_after_.ru_majflt - rusage_before_.ru_majflt;
+    voluntary_ctxt_switches =
+        rusage_after_.ru_nvcsw - rusage_before_.ru_nvcsw;
+    involuntary_ctxt_switches =
+        rusage_after_.ru_nivcsw - rusage_before_.ru_nivcsw;
+  }
+
   std::string body = std::format(
       R"({{"metric_type":"order","timestamp":"{}","iteration_id":{},"broker":"{}",)"
       R"("outcome":"{}","error_message":{},)"
       R"("total_ms":{},"sdk_local_ms":{},"ack_rtt_ms":{},"cancel_rtt_ms":{},)"
+      R"("minor_faults":{},"major_faults":{},)"
+      R"("voluntary_ctxt_switches":{},"involuntary_ctxt_switches":{},)"
       R"("tcp_rtt_us":{},"tcp_rttvar_us":{},"tcp_snd_cwnd":{},"tcp_retrans":{}}})",
       nowTimestamp(), order_counter_, config_.broker_name, outcome_,
       fmtOptString(error_message_), fmtOpt(total_ms_), fmtOpt(sdk_local_ms_),
-      fmtOpt(ack_rtt_ms_), fmtOpt(cancel_rtt_ms_), fmtOpt(tcp_info_.rtt_us),
+      fmtOpt(ack_rtt_ms_), fmtOpt(cancel_rtt_ms_), fmtOpt(minor_faults),
+      fmtOpt(major_faults), fmtOpt(voluntary_ctxt_switches),
+      fmtOpt(involuntary_ctxt_switches), fmtOpt(tcp_info_.rtt_us),
       fmtOpt(tcp_info_.rttvar_us), fmtOpt(tcp_info_.snd_cwnd),
       fmtOpt(tcp_info_.total_retrans));
 

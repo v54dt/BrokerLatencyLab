@@ -2,6 +2,7 @@
 #define LATENCY_MEASUREMENT_H
 
 #include <toml++/toml.h>
+#include <sys/resource.h>
 
 #include <atomic>
 #include <chrono>
@@ -83,6 +84,12 @@ class LatencyMeasurement {
 
   // Kernel TCP info
   TcpInfoSnapshot tcp_info_;
+
+  // getrusage(RUSAGE_SELF) snapshots taken at submit + ack callback.
+  // rusage_valid_ becomes true once the ack callback captures the after state.
+  struct rusage rusage_before_{};
+  struct rusage rusage_after_{};
+  bool rusage_valid_ = false;
 
   // Order tracking
   int order_counter_ = 0;
