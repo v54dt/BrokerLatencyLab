@@ -123,8 +123,42 @@ struct OrderFillResult {
   std::string transaction_id;
 };
 
+enum class OrderStatus {
+  Submitted,          // 委託成功
+  PartialFilled,      // 部分成交
+  Filled,             // 完全成交
+  Cancelled,          // 委託取消
+  Failed,             // 委託失敗
+  SubmitPending,      // 委託送出
+  PreOrderSubmitted,  // 委託成功(預約單)
+  PreOrderCancelled,  // 委託取消(預約單)
+  PreOrderFailed      // 委託失敗(預約單)
+};
 
+struct OrderState {
+  std::string order_id;
+  std::string order_ticket_id;
+  std::string symbol;
+  enum OrderBoard order_board;
+  enum FundingType funding_type;
+  enum Side side;
+  std::string price;               // 委託價格
+  std::string quantity;            // 委託數量
+  enum OrderStatus order_status;   // 委託狀態
+  std::string filled_quantity;     // 成交數量
+  std::string filled_price;        // 成交均價
+  std::string cancelled_quantity;  // 取消數量
+  std::string remaining_quantity;  // 剩餘數量
+  std::string error_message;
+  std::string submit_timestamp;       // 委託時間
+  std::string last_filled_timestamp;  // 最後成交時間
+};
 
+struct OrderStateResponse {
+  bool status;
+  std::string error_message;
+  std::vector<OrderState> responses;
+};
 
 }  // namespace stock
 }  // namespace concords_sdk

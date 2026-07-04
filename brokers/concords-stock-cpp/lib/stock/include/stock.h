@@ -60,6 +60,7 @@ class StockClient {
   virtual void SetOrderFillCallback(OrderFillCallback callback) = 0;
 
   // Account and position queries
+  virtual std::optional<AccountResponse> GetAccountSummary() = 0;
   virtual std::optional<UnrealizedProfitLossStatementResponse>
   GetPosition() = 0;  // GetPosition() now only support get all stocks
   virtual std::optional<TodaySettlementEstimateResponse>
@@ -75,6 +76,13 @@ class StockClient {
                         const std::string& end_date) = 0;
   virtual std::optional<MaintenanceRatioResponse> GetMaintenanceRatio() = 0;
   virtual std::optional<TradeFillsResponse> GetTodayTradeFills() = 0;
+
+  virtual std::optional<OrderStateResponse> GetOrders() = 0;
+  virtual std::optional<OrderStateResponse> GetOrders(std::string& symbol) = 0;
+  virtual std::optional<OrderStateResponse> GetOrders(
+      enum OrderStatus status) = 0;
+  virtual std::optional<OrderStateResponse> GetOrders(
+      std::string& symbol, enum OrderStatus status) = 0;
 };
 
 std::unique_ptr<StockClient> BuildStockClient(const char* user_id,
@@ -82,8 +90,6 @@ std::unique_ptr<StockClient> BuildStockClient(const char* user_id,
                                               const char* account,
                                               const char* pfx_filepath,
                                               const char* pfx_password);
-
-void Shutdown();
 
 }  // namespace stock
 }  // namespace concords_sdk
