@@ -31,6 +31,11 @@ target_link_libraries(fingerprint_test PRIVATE GTest::gtest_main)
 add_executable(replay_test tests/replay_test.cpp round_engine.cpp)
 target_link_libraries(replay_test PRIVATE GTest::gtest_main pthread)
 
+add_executable(tick-to-trade main.cpp round_engine.cpp)
+target_link_libraries(
+  tick-to-trade PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../lib/concords_sdk.so
+                        tomlplusplus::tomlplusplus pthread)
+
 add_executable(cancel_all cancel_all.cpp)
 target_link_libraries(
   cancel_all PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../lib/concords_sdk.so
