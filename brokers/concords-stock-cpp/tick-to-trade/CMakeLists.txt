@@ -19,12 +19,22 @@ FetchContent_Declare(
   GIT_REPOSITORY https://github.com/google/googletest.git
   GIT_TAG v1.14.0)
 FetchContent_MakeAvailable(googletest)
+FetchContent_Declare(
+  tomlplusplus
+  GIT_REPOSITORY https://github.com/marzer/tomlplusplus.git
+  GIT_TAG v3.4.0)
+FetchContent_MakeAvailable(tomlplusplus)
 
 add_executable(fingerprint_test tests/fingerprint_test.cpp)
 target_link_libraries(fingerprint_test PRIVATE GTest::gtest_main)
 
 add_executable(replay_test tests/replay_test.cpp round_engine.cpp)
 target_link_libraries(replay_test PRIVATE GTest::gtest_main pthread)
+
+add_executable(cancel_all cancel_all.cpp)
+target_link_libraries(
+  cancel_all PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../lib/concords_sdk.so
+                     tomlplusplus::tomlplusplus pthread)
 
 enable_testing()
 include(GoogleTest)
