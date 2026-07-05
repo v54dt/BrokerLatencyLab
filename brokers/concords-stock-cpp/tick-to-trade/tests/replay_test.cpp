@@ -691,82 +691,92 @@ QuotationView Book(std::vector<concords_sdk::ticker::PriceVolume> bids,
   return v;
 }
 
-std::vector<Price> Prices(std::initializer_list<const char*> texts) {
-  std::vector<Price> out;
-  for (const char* t : texts) out.push_back(P(t));
-  return out;
+TEST(PriceSelectionTest, TickStepping) {
+  EXPECT_TRUE(PriceEq(NextTickBelow(P("10.05")).value(), P("10.00")));
+  EXPECT_TRUE(PriceEq(NextTickBelow(P("10.00")).value(), P("9.99")));
+  EXPECT_TRUE(PriceEq(NextTickBelow(P("9.99")).value(), P("9.98")));
+  EXPECT_TRUE(PriceEq(NextTickBelow(P("50")).value(), P("49.95")));
+  EXPECT_TRUE(PriceEq(NextTickBelow(P("100")).value(), P("99.9")));
+  EXPECT_TRUE(PriceEq(NextTickBelow(P("500")).value(), P("499.5")));
+  EXPECT_TRUE(PriceEq(NextTickBelow(P("1000")).value(), P("999")));
+  EXPECT_FALSE(NextTickBelow(P("0.01")).has_value());
+
+  EXPECT_TRUE(PriceEq(NextTickAbove(P("9.99")).value(), P("10.00")));
+  EXPECT_TRUE(PriceEq(NextTickAbove(P("10.00")).value(), P("10.05")));
+  EXPECT_TRUE(PriceEq(NextTickAbove(P("49.95")).value(), P("50")));
 }
 
-TEST(PriceSelectionTest, SelectPrices) {
-  const SelectionConfig cfg{.min_ticks_below_bid = 2};
-
+TEST(PriceSelectionTest, SelectsNearestEligibleLevels) {
   const auto book = Book({PV("10.40", 5), PV("10.30", 2)});
-  const auto sel = SelectPrices(Prices({"10.35", "10.30", "10.25", "10.20"}),
-                                book, /*is_buy=*/true, cfg);
+  const auto sel = SelectPricesFromBook(book, true, {2, 10});
   EXPECT_TRUE(sel.has_value());
-  EXPECT_TRUE(PriceEq(sel->p2, P("10.25")) && PriceEq(sel->p1, P("10.20")));
+  EXPECT_TRUE(PriceEq(sel->p2, P("10.25")));
+  EXPECT_TRUE(PriceEq(sel->p1, P("10.20")));
+}
 
+TEST(PriceSelectionTest, FullContiguousBookHasNoWindow) {
   const auto full = Book({PV("10.40", 1), PV("10.35", 1), PV("10.30", 1),
                           PV("10.25", 1), PV("10.20", 1)});
-  EXPECT_TRUE(
-      !SelectPrices(Prices({"10.15", "10.10", "10.05"}), full, true, cfg)
-           .has_value());
+  EXPECT_FALSE(SelectPricesFromBook(full, true, {2, 10}).has_value());
+}
 
+TEST(PriceSelectionTest, GappyFullBookUsesGaps) {
   const auto gappy = Book({PV("10.40", 1), PV("10.30", 1), PV("10.20", 1),
                            PV("10.10", 1), PV("10.00", 1)});
-  const auto sel2 =
-      SelectPrices(Prices({"10.25", "10.15", "10.05"}), gappy, true, cfg);
-  EXPECT_TRUE(sel2.has_value());
-  EXPECT_TRUE(PriceEq(sel2->p2, P("10.25")) && PriceEq(sel2->p1, P("10.15")));
-
-  EXPECT_TRUE(
-      !SelectPrices(Prices({"10.45", "10.50"}), book, true, cfg).has_value());
-
-  EXPECT_TRUE(
-      !SelectPrices(Prices({"10.05"}), Book({}), true, cfg).has_value());
-
-  EXPECT_TRUE(!SelectPrices(Prices({"10.25"}), book, true, cfg).has_value());
-
-  const auto ask_book = Book({}, {PV("10.40", 3), PV("10.50", 1)});
-  const auto sel3 = SelectPrices(Prices({"10.45", "10.50", "10.55", "10.60"}),
-                                 ask_book, /*is_buy=*/false, cfg);
-  EXPECT_TRUE(sel3.has_value());
-  EXPECT_TRUE(PriceEq(sel3->p2, P("10.55")) && PriceEq(sel3->p1, P("10.60")));
+  const auto sel = SelectPricesFromBook(gappy, true, {2, 10});
+  EXPECT_TRUE(sel.has_value());
+  EXPECT_TRUE(PriceEq(sel->p2, P("10.25")));
+  EXPECT_TRUE(PriceEq(sel->p1, P("10.15")));
 }
 
-TEST(PriceSelectionTest, OffsetTicks) {
-  EXPECT_TRUE(PriceEq(OffsetTicks(P("10.40"), -2).value(), P("10.30")));
-  EXPECT_TRUE(PriceEq(OffsetTicks(P("9.99"), -3).value(), P("9.96")));
-  EXPECT_TRUE(PriceEq(OffsetTicks(P("10.40"), 2).value(), P("10.50")));
-  EXPECT_TRUE(!OffsetTicks(P("0.02"), -3).has_value());
+TEST(PriceSelectionTest, CrossesTickBandBoundary) {
+  const auto book = Book({PV("10.05", 3)});
+  const auto sel = SelectPricesFromBook(book, true, {2, 10});
+  EXPECT_TRUE(sel.has_value());
+  EXPECT_TRUE(PriceEq(sel->p2, P("9.99")));
+  EXPECT_TRUE(PriceEq(sel->p1, P("9.98")));
 }
 
-TEST(PricePoolTest, Lifecycle) {
-  EXPECT_TRUE(!PricePool::FromStrings({"10.15", "11.27"}).has_value());
-  EXPECT_TRUE(!PricePool::FromStrings({"10.15", "10.15"}).has_value());
-  EXPECT_TRUE(!PricePool::FromStrings({"10.15", "10.150"}).has_value());
+TEST(PriceSelectionTest, HonorsExclusions) {
+  const auto book = Book({PV("10.40", 5)});
+  PriceTracker tracker;
+  tracker.Taint(P("10.30"));
+  EXPECT_TRUE(tracker.MarkInUse(P("10.25")));
+  const auto sel = SelectPricesFromBook(
+      book, true, {2, 10}, [&](Price p) { return tracker.IsBlocked(p); });
+  EXPECT_TRUE(sel.has_value());
+  EXPECT_TRUE(PriceEq(sel->p2, P("10.20")));
+  EXPECT_TRUE(PriceEq(sel->p1, P("10.15")));
+}
 
-  auto pool = PricePool::FromStrings({"10.15", "10.10", "10.05"});
-  EXPECT_TRUE(pool.has_value());
-  EXPECT_TRUE(pool->size() == 3 && pool->available_count() == 3);
+TEST(PriceSelectionTest, EmptyLadderYieldsNothing) {
+  EXPECT_FALSE(SelectPricesFromBook(Book({}), true, {2, 10}).has_value());
+}
 
-  EXPECT_TRUE(pool->MarkInUse(P("10.15")));
-  EXPECT_TRUE(!pool->MarkInUse(P("10.15")));
-  EXPECT_TRUE(pool->available_count() == 2);
-  EXPECT_TRUE(pool->Release(P("10.15")));
-  EXPECT_TRUE(pool->MarkInUse(P("10.15")));
-  EXPECT_TRUE(pool->Release(P("10.15")));
-  EXPECT_TRUE(pool->available_count() == 3);
+TEST(PriceSelectionTest, SellMirror) {
+  const auto book = Book({}, {PV("10.40", 3), PV("10.50", 1)});
+  const auto sel = SelectPricesFromBook(book, false, {2, 10});
+  EXPECT_TRUE(sel.has_value());
+  EXPECT_TRUE(PriceEq(sel->p2, P("10.55")));
+  EXPECT_TRUE(PriceEq(sel->p1, P("10.60")));
+}
 
-  EXPECT_TRUE(pool->Taint(P("10.10")));
-  EXPECT_TRUE(pool->available_count() == 2);
-  EXPECT_TRUE(!pool->Release(P("10.10")));
-  EXPECT_TRUE(!pool->MarkInUse(P("10.10")));
-  EXPECT_TRUE(pool->available_count() == 2);
+TEST(PriceTrackerTest, Lifecycle) {
+  PriceTracker t;
+  EXPECT_TRUE(t.MarkInUse(P("10.15")));
+  EXPECT_FALSE(t.MarkInUse(P("10.15")));
+  EXPECT_TRUE(t.IsBlocked(P("10.150")));
+  EXPECT_TRUE(t.Release(P("10.15")));
+  EXPECT_FALSE(t.Release(P("10.15")));
+  EXPECT_FALSE(t.IsBlocked(P("10.15")));
 
-  EXPECT_TRUE(!pool->MarkInUse(P("9.99")));
-  EXPECT_TRUE(pool->TextOf(P("10.05")) != nullptr &&
-              *pool->TextOf(P("10.05")) == "10.05");
+  EXPECT_TRUE(t.MarkInUse(P("10.15")));
+  t.Taint(P("10.15"));
+  EXPECT_TRUE(t.IsBlocked(P("10.15")));
+  EXPECT_FALSE(t.MarkInUse(P("10.15")));
+  EXPECT_FALSE(t.Release(P("10.15")));
+  EXPECT_EQ(t.in_use_count(), 0u);
+  EXPECT_EQ(t.tainted_count(), 1u);
 }
 
 }  // namespace

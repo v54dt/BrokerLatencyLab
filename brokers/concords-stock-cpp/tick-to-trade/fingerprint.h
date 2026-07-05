@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <optional>
+#include <string>
 #include <string_view>
 
 #include "ticker/include/ticker.h"
@@ -49,6 +50,14 @@ inline bool PriceEq(Price a, Price b) {
 
 inline bool PriceLt(Price a, Price b) {
   return a.digits * Pow10(b.precision) < b.digits * Pow10(a.precision);
+}
+
+inline std::string FormatPrice(Price p) {
+  std::string digits = std::to_string(p.digits);
+  if (p.precision == 0) return digits;
+  while (digits.size() <= p.precision) digits.insert(0, "0");
+  digits.insert(digits.size() - p.precision, ".");
+  return digits;
 }
 
 inline std::optional<Price> FromFixedPoint(

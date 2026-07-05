@@ -147,6 +147,15 @@ TEST(QuotationViewTest, VectorsSatisfyLadderInterface) {
   EXPECT_EQ(CountLevelsBelow(v.asks, P("10.50")), 1u);
 }
 
+TEST(FormatPriceTest, RendersFixedDecimals) {
+  EXPECT_EQ(FormatPrice(P("10.15")), "10.15");
+  EXPECT_EQ(FormatPrice(P("10")), "10");
+  EXPECT_EQ(FormatPrice(P("0.01")), "0.01");
+  EXPECT_EQ(FormatPrice(Price{999, 2}), "9.99");
+  EXPECT_EQ(FormatPrice(Price{5, 1}), "0.5");
+  EXPECT_EQ(FormatPrice(Price{1000, 2}), "10.00");
+}
+
 TEST(MonoClockTest, MonotonicNonZero) {
   const std::uint64_t a = MonoNs();
   const std::uint64_t b = MonoNs();
