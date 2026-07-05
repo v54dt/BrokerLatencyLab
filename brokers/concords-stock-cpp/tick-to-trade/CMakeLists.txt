@@ -23,6 +23,10 @@ FetchContent_MakeAvailable(googletest)
 add_executable(fingerprint_test tests/fingerprint_test.cpp)
 target_link_libraries(fingerprint_test PRIVATE GTest::gtest_main)
 
+add_executable(replay_test tests/replay_test.cpp round_engine.cpp)
+target_link_libraries(replay_test PRIVATE GTest::gtest_main pthread)
+
 enable_testing()
 include(GoogleTest)
 gtest_discover_tests(fingerprint_test)
+gtest_discover_tests(replay_test)
